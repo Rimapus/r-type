@@ -1,0 +1,836 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rfc xmlns:xi="http://www.w3.org/2001/XInclude"
+     ipr="none"
+     docName="draft-jtype-protocol-00"
+     category="info"
+     submissionType="IETF"
+     consensus="false"
+     xml:lang="en"
+     version="3">
+
+  <front>
+    <title abbrev="J-Type Protocol">J-Type Network Protocol</title>
+    <seriesInfo name="Internet-Draft" value="draft-jtype-protocol-00"/>
+    <author fullname="Matteo Tutti" initials="M." surname="Tutti">
+      <organization>EPITECH</organization>
+      <address>
+        <email>matteo.tutti@epitech.eu</email>
+      </address>
+    </author>
+    <author fullname="Matthias Yildirim" initials="M." surname="Yildirim">
+      <organization>EPITECH</organization>
+      <address>
+        <email>matthias.yildirim@epitech.eu</email>
+      </address>
+    </author>
+    <author fullname="Valentino Zarrillo" initials="V." surname="Zarrillo">
+      <organization>EPITECH</organization>
+      <address>
+        <email>valentino.zarrillo@epitech.eu</email>
+      </address>
+    </author>
+    <date month="November" year="2026"/>
+    <area>General</area>
+    <workgroup>J-Type</workgroup>
+    <abstract>
+      <t>This document specifies the UDP protocol between the J-Type server and its clients. It defines the packet
+        header, the session handshake and keepalive, every game message, the way a snapshot is split into datagrams,
+        and the rules a receiver applies to what it accepts. It is the reference for writing another client for a
+        J-Type server.</t>
+    </abstract>
+  </front>
+
+  <middle>
+
+    <section anchor="introduction">
+      <name>Introduction</name>
+      <t>J-Type is a networked shoot'em up for up to four players. One server owns the game: it moves the ships,
+        decides what the missiles hit, keeps the score and sends the world to every client. A client reads the keys,
+        sends them, and draws what the server sends. This document describes the bytes they exchange.</t>
+      <t>The engine provides the datagram envelope and the session layer. The game puts one message in each
+        <tt>GameData</tt> packet. The protocol is state based: the server repeats the whole world and the whole score at
+        every step, and the events only announce a change that the state of the same step already carries.</t>
+
+      <section anchor="requirements-language">
+        <name>Requirements Language</name>
+        <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT",
+          "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described
+          in BCP 14 <xref target="RFC2119"/> <xref target="RFC8174"/> when, and only when, they appear in all
+          capitals, as shown here.</t>
+      </section>
+
+      <section anchor="scope">
+        <name>Scope</name>
+        <t>This document covers version 1 of the protocol. It does not describe the rules of the game, the assets, the
+          rendering, or the C++ API of the implementation. The values of the game, such as the points a Bydo is worth,
+          are part of the game and not of the wire format.</t>
+      </section>
+    </section>
+
+    <section anchor="transport">
+      <name>Transport and Framing</name>
+      <t>The protocol runs over UDP <xref target="RFC768"/>. A datagram carries exactly one packet. IP fragmentation is
+        avoided: a datagram MUST NOT exceed 1200 bytes including the packet header, so it fits in the usual 1500-byte
+        Ethernet MTU after the IP and UDP headers.</t>
+      <t>UDP does not deliver, order or deduplicate datagrams. A receiver MUST tolerate loss, reordering and
+        duplication. The protocol does not retransmit lost game messages: the next state makes up for a lost one, as
+        described in <xref target="reliability"/>.</t>
+      <t>All multi-byte integer fields are unsigned and encoded in little-endian order, least significant byte first.
+        Floating-point fields are IEEE 754 binary32 values <xref target="IEEE754"/>, also little-endian. A receiver MUST
+        reject a non-finite floating-point field.</t>
+    </section>
+
+    <section anchor="packet-header">
+      <name>Packet Header</name>
+      <t>Every datagram starts with the 8-byte header of the engine. The fields are:</t>
+
+      <table anchor="header-fields">
+        <name>Packet Header Fields</name>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Bytes</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Magic</td>
+            <td>u16</td>
+            <td>2</td>
+            <td>0x3659, the bytes 0x59 0x36, "Y6"</td>
+          </tr>
+          <tr>
+            <td>Version</td>
+            <td>u8</td>
+            <td>1</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>Type</td>
+            <td>u8</td>
+            <td>1</td>
+            <td>See <xref target="packet-types"/></td>
+          </tr>
+          <tr>
+            <td>Sequence</td>
+            <td>u32</td>
+            <td>4</td>
+            <td>Sequence number of the sender</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <t>The magic number rejects traffic from another application before any parsing. A datagram whose magic,
+        version or type is unknown, that is shorter than the header, or that is longer than 1200 bytes MUST be dropped
+        silently. The sequence number is a counter of the sender for each peer, starting at 0, increased by one for each
+        packet sent to that peer, session packets and game messages alike, and wrapping modulo 2^32. It lets the peer
+        detect loss; the protocol does not acknowledge or retransmit game
+        messages.</t>
+
+      <table anchor="packet-types">
+        <name>Packet Types</name>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Value</th>
+            <th>Payload</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GameData</td>
+            <td>0x01</td>
+            <td>One game message, see <xref target="messages"/></td>
+            <td>Carries the game</td>
+          </tr>
+          <tr>
+            <td>Ping</td>
+            <td>0x02</td>
+            <td>u32 cookie</td>
+            <td>Measures a round trip</td>
+          </tr>
+          <tr>
+            <td>Pong</td>
+            <td>0x03</td>
+            <td>u32 cookie, copied from the Ping</td>
+            <td>Answers a Ping</td>
+          </tr>
+          <tr>
+            <td>Connect</td>
+            <td>0x80</td>
+            <td>Empty</td>
+            <td>Opens a session</td>
+          </tr>
+          <tr>
+            <td>ConnectAck</td>
+            <td>0x81</td>
+            <td>Empty</td>
+            <td>Accepts a session</td>
+          </tr>
+          <tr>
+            <td>Heartbeat</td>
+            <td>0x82</td>
+            <td>Empty</td>
+            <td>Keeps a session alive</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <t>A Ping or a Pong MUST carry exactly 4 payload bytes; a Connect, a ConnectAck or a Heartbeat MUST carry none.
+        A packet that breaks these rules MUST be dropped. The payload of a GameData packet is decoded as described
+        in <xref target="messages"/>.</t>
+    </section>
+
+    <section anchor="session">
+      <name>Session</name>
+      <t>The session layer keeps track of the peers and of their liveness. A client MUST NOT send a game message
+        before its session is open, and a server MUST drop a game message that comes from an endpoint without a
+        session.</t>
+
+      <section anchor="handshake">
+        <name>Handshake</name>
+        <t>The client sends a Connect and waits for a ConnectAck. It repeats the Connect until the server answers, so a
+          lost Connect or ConnectAck only delays the handshake. The server answers every Connect from a known or a new
+          endpoint with a ConnectAck and a Connect resets the sequence number that the server uses for that endpoint to
+          0.</t>
+        <t>The server keeps at most 1024 sessions. A Connect from a new endpoint while the table is full is dropped
+          without an answer. A session ends when the peer stays silent for 3000 ms; a Leave frees the player's slot at
+          once, without waiting for the timeout.</t>
+      </section>
+
+      <section anchor="keepalive">
+        <name>Keepalive</name>
+        <t>Once the session is open, the client sends a Heartbeat every 500 ms. The server answers each Heartbeat with
+          a Heartbeat, so the client keeps hearing from the server even when the game sends nothing. A peer MAY also
+          send a Ping every 1000 ms; the peer answers with a Pong carrying the same cookie, and the sender measures the
+          round trip.</t>
+        <t>Any valid packet from a known peer refreshes its session, not only a Heartbeat. A heartbeat interval is
+          shorter than the timeout, so several heartbeats fit in one timeout and a single lost datagram does not end a
+          healthy session.</t>
+      </section>
+    </section>
+
+    <section anchor="messages">
+      <name>Game Messages</name>
+      <t>A GameData payload holds exactly one game message. Its first byte is the message type; the fields follow, in
+        the order of this document. A decoder MUST reject an empty payload, an unknown type, a field that runs past the
+        payload, a value outside its range, and a payload with bytes left after the last field.</t>
+
+      <table anchor="message-types">
+        <name>Game Message Types</name>
+        <thead>
+          <tr>
+            <th>Message</th>
+            <th>Value</th>
+            <th>Direction</th>
+            <th>Payload bytes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Join</td><td>1</td><td>Client to server</td><td>1</td></tr>
+          <tr><td>Welcome</td><td>2</td><td>Server to client</td><td>2</td></tr>
+          <tr><td>Input</td><td>3</td><td>Client to server</td><td>6</td></tr>
+          <tr><td>Snapshot</td><td>4</td><td>Server to client</td><td>15 + 14n</td></tr>
+          <tr><td>Scoreboard</td><td>5</td><td>Server to client</td><td>34</td></tr>
+          <tr><td>Leave</td><td>6</td><td>Client to server</td><td>1</td></tr>
+          <tr><td>Full</td><td>7</td><td>Server to client</td><td>1</td></tr>
+          <tr><td>Spawn</td><td>8</td><td>Server to client</td><td>19</td></tr>
+          <tr><td>Destroy</td><td>9</td><td>Server to client</td><td>9</td></tr>
+          <tr><td>PlayerDisconnected</td><td>10</td><td>Server to client</td><td>6</td></tr>
+          <tr><td>ScoreEvent</td><td>11</td><td>Server to client</td><td>10</td></tr>
+          <tr><td>DeathEvent</td><td>12</td><td>Server to client</td><td>10</td></tr>
+          <tr><td>GameOverEvent</td><td>13</td><td>Server to client</td><td>5</td></tr>
+          <tr><td>PickUpEvent</td><td>14</td><td>Server to client</td><td>7</td></tr>
+        </tbody>
+      </table>
+
+      <section anchor="entity-state">
+        <name>Entity State</name>
+        <t>A snapshot and a Spawn event carry entities in this 14-byte form:</t>
+
+        <table anchor="entity-fields">
+          <name>Entity State Fields</name>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Type</th>
+              <th>Bytes</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Id</td><td>u32</td><td>4</td><td>Identity of the entity for the whole game</td></tr>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>See <xref target="entity-types"/></td></tr>
+            <tr><td>X</td><td>f32</td><td>4</td><td>Horizontal position, in world pixels</td></tr>
+            <tr><td>Y</td><td>f32</td><td>4</td><td>Vertical position, in world pixels</td></tr>
+            <tr><td>Health</td><td>u8</td><td>1</td><td>Health points left, 0 for an entity without health</td></tr>
+          </tbody>
+        </table>
+
+        <table anchor="entity-types">
+          <name>Entity Types</name>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Value</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Player1</td><td>0</td><td>Ship of the player of slot 0</td></tr>
+            <tr><td>Player2</td><td>1</td><td>Ship of the player of slot 1</td></tr>
+            <tr><td>Player3</td><td>2</td><td>Ship of the player of slot 2</td></tr>
+            <tr><td>Player4</td><td>3</td><td>Ship of the player of slot 3</td></tr>
+            <tr><td>Missile1</td><td>4</td><td>Missile of the player of slot 0</td></tr>
+            <tr><td>Missile2</td><td>5</td><td>Missile of the player of slot 1</td></tr>
+            <tr><td>Missile3</td><td>6</td><td>Missile of the player of slot 2</td></tr>
+            <tr><td>Missile4</td><td>7</td><td>Missile of the player of slot 3</td></tr>
+            <tr><td>EnemyMissile</td><td>8</td><td>Missile of a Bydo</td></tr>
+            <tr><td>Blobling</td><td>9</td><td>Bydo with one health point</td></tr>
+            <tr><td>Jelly</td><td>10</td><td>Bydo with two health points</td></tr>
+            <tr><td>SentryDrone</td><td>11</td><td>Bydo with three health points</td></tr>
+            <tr><td>Explosion</td><td>12</td><td>Ship or Bydo that was just destroyed</td></tr>
+            <tr><td>IncubatorBody</td><td>13</td><td>Armored body of the boss</td></tr>
+            <tr><td>IncubatorEye</td><td>14</td><td>Eye of the boss, the part the players can hurt</td></tr>
+            <tr><td>IncubatorEyeAngry</td><td>15</td><td>Eye of the boss once it lost half of its health</td></tr>
+            <tr><td>IncubatorOrb</td><td>16</td><td>Orb the boss fires at a player</td></tr>
+            <tr><td>IncubatorSpit</td><td>17</td><td>Spit of a fan the boss fires</td></tr>
+            <tr><td>IncubatorWreck</td><td>18</td><td>Boss that was just destroyed</td></tr>
+            <tr><td>SpreadPellet1</td><td>19</td><td>Pellet of the spread shot of the player of slot 0</td></tr>
+            <tr><td>SpreadPellet2</td><td>20</td><td>Pellet of the spread shot of the player of slot 1</td></tr>
+            <tr><td>SpreadPellet3</td><td>21</td><td>Pellet of the spread shot of the player of slot 2</td></tr>
+            <tr><td>SpreadPellet4</td><td>22</td><td>Pellet of the spread shot of the player of slot 3</td></tr>
+            <tr><td>ExtraLifePowerUp</td><td>23</td><td>Power-up that gives a life</td></tr>
+            <tr><td>ShieldPowerUp</td><td>24</td><td>Power-up that gives a shield</td></tr>
+            <tr><td>SpreadShotPowerUp</td><td>25</td><td>Power-up that gives the spread shot</td></tr>
+            <tr><td>Block</td><td>26</td><td>Block of a wall</td></tr>
+            <tr><td>CrackedBlock</td><td>27</td><td>Block of a wall that took a hit</td></tr>
+            <tr><td>ZapperNode</td><td>28</td><td>End of a zapper</td></tr>
+            <tr><td>ZapperBeam</td><td>29</td><td>Piece of the beam of a zapper</td></tr>
+          </tbody>
+        </table>
+
+        <t>A type outside this table MUST be rejected. The id of an entity is stable while it exists; once it is
+          destroyed, the server may give the same id to a new entity. A receiver MUST therefore treat a Destroy event
+          or the disappearance of an id from a snapshot as the end of that entity, and a Spawn event as the start of a
+          new one.</t>
+      </section>
+
+      <section anchor="message-join">
+        <name>Join</name>
+        <t>The client sends a Join once its session is open, and repeats it every 500 ms until the server answers with a
+          Welcome or a Full. A client that already holds a slot gets that slot in a new Welcome. A Join starts a new
+          stream of inputs: the server forgets the last input step it accepted from the client.</t>
+        <table>
+          <name>Join Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>1</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="message-welcome">
+        <name>Welcome</name>
+        <t>The server answers a Join with the slot of the player. A new client gets the first free slot, from 0 to 3;
+          a client that already has a slot gets it again.</t>
+        <table>
+          <name>Welcome Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>2</td></tr>
+            <tr><td>Slot</td><td>u8</td><td>1</td><td>0 to 3</td></tr>
+          </tbody>
+        </table>
+        <t>A slot outside 0 to 3 MUST be rejected.</t>
+      </section>
+
+      <section anchor="message-input">
+        <name>Input</name>
+        <t>The client sends its input at each of its steps. The payload holds the keys held down and the step of the
+          client. The server applies an input to the ship of the slot that owns the endpoint; the wire carries no slot,
+          so a client cannot move another player's ship.</t>
+        <table>
+          <name>Input Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>3</td></tr>
+            <tr><td>Inputs</td><td>u8</td><td>1</td><td>Bitmask, see <xref target="input-bits"/></td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the client</td></tr>
+          </tbody>
+        </table>
+
+        <table anchor="input-bits">
+          <name>Input Bits</name>
+          <thead><tr><th>Bit</th><th>Mask</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>0x01</td><td>Up</td></tr>
+            <tr><td>1</td><td>0x02</td><td>Down</td></tr>
+            <tr><td>2</td><td>0x04</td><td>Left</td></tr>
+            <tr><td>3</td><td>0x08</td><td>Right</td></tr>
+            <tr><td>4</td><td>0x10</td><td>Shoot</td></tr>
+          </tbody>
+        </table>
+
+        <t>A bit outside 0x1F MUST be rejected. The client starts its tick at 1 and increases it by one for each Input
+          it sends; the counter wraps modulo 2^32. The server keeps the last tick it accepted for the client, resets it
+          on a Join, and drops an Input whose tick is not newer under the serial comparison of
+          <xref target="reliability"/>. The server applies the input to the ship during the next step, and gives its
+          tick back in the Last input field of the snapshots it sends to that client.</t>
+      </section>
+
+      <section anchor="message-snapshot">
+        <name>Snapshot</name>
+        <t>The server sends a snapshot at each of its steps. A snapshot is the whole world: every entity the clients
+          must draw. When the entities do not fit in one datagram, the server splits the snapshot into chunks, as
+          described in <xref target="snapshots"/>; every chunk carries the same tick, the same last input and the same
+          counts.</t>
+        <t>The Last input field is the tick of the last Input the server accepted from the client the snapshot is sent
+          to, or 0 before the first one. The ship of that client has moved with this input, so the client can draw its
+          own ship from the snapshot moved again by the inputs it sent since.</t>
+        <table>
+          <name>Snapshot Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>4</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Last input</td><td>u32</td><td>4</td><td>Tick of the last Input accepted from this client, 0 before the first</td></tr>
+            <tr><td>Chunk index</td><td>u8</td><td>1</td><td>0 to chunk count minus 1</td></tr>
+            <tr><td>Chunk count</td><td>u8</td><td>1</td><td>Number of datagrams of this snapshot, at least 1</td></tr>
+            <tr><td>Entity count</td><td>u16</td><td>2</td><td>Entities of the whole snapshot</td></tr>
+            <tr><td>Count</td><td>u16</td><td>2</td><td>Entities in this chunk</td></tr>
+            <tr><td>Entities</td><td>EntityState[]</td><td>14n</td><td>The entities of this chunk, in snapshot order</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="message-scoreboard">
+        <name>Scoreboard</name>
+        <t>The server sends the scoreboard after the events of each step. It always holds the four slots, in order, so
+          its size is fixed.</t>
+        <table>
+          <name>Scoreboard Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>5</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Game over</td><td>u8</td><td>1</td><td>0 while the game runs, 1 once every player is out of lives, 2 once the boss is beaten</td></tr>
+            <tr><td>Slots</td><td>PlayerStatus[4]</td><td>28</td><td>Four entries of 7 bytes, see below</td></tr>
+          </tbody>
+        </table>
+        <table>
+          <name>PlayerStatus Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>State</td><td>u8</td><td>1</td><td>See <xref target="slot-states"/></td></tr>
+            <tr><td>Score</td><td>u32</td><td>4</td><td>Points of the player</td></tr>
+            <tr><td>Lives</td><td>u8</td><td>1</td><td>Lives left</td></tr>
+            <tr><td>Weapon</td><td>u8</td><td>1</td><td>See <xref target="weapons"/></td></tr>
+          </tbody>
+        </table>
+        <table anchor="weapons">
+          <name>Weapons</name>
+          <thead><tr><th>Name</th><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Plasma</td><td>0</td><td>One missile straight ahead</td></tr>
+            <tr><td>Spread</td><td>1</td><td>Three pellets in a fan</td></tr>
+          </tbody>
+        </table>
+        <table anchor="slot-states">
+          <name>Slot States</name>
+          <thead><tr><th>Name</th><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Free</td><td>0</td><td>Nobody joined on this slot</td></tr>
+            <tr><td>Playing</td><td>1</td><td>The player has a ship</td></tr>
+            <tr><td>Out</td><td>2</td><td>The player is out of lives until the next game</td></tr>
+            <tr><td>Left</td><td>3</td><td>The player quit or timed out</td></tr>
+          </tbody>
+        </table>
+        <t>A state outside 0 to 3, a weapon outside 0 to 1 and a game over byte outside 0 to 2 MUST be rejected. The game over byte is 1 or 2
+          from the step the game ends until the server starts the next game.</t>
+      </section>
+
+      <section anchor="message-leave">
+        <name>Leave</name>
+        <t>The client sends a Leave when it quits. The server frees the slot at once, removes the ship, and tells the
+          other clients with a PlayerDisconnected event and the next scoreboard. A client that never joined MAY send a
+          Leave; the server ignores it.</t>
+        <table>
+          <name>Leave Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>6</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="message-full">
+        <name>Full</name>
+        <t>The server answers a Join with a Full instead of a Welcome when the four slots are taken. The client cannot
+          play and stops.</t>
+        <table>
+          <name>Full Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>7</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="message-spawn">
+        <name>Spawn</name>
+        <t>The server announces an entity that appeared since the previous snapshot. The event carries the whole
+          entity, so a client that missed the snapshot can still create it. The snapshot of the same step contains the
+          entity too.</t>
+        <table>
+          <name>Spawn Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>8</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Entity</td><td>EntityState</td><td>14</td><td>The entity that appeared</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="message-destroy">
+        <name>Destroy</name>
+        <t>The server announces that an entity is gone since the previous snapshot. The snapshot of the same step does
+          not contain its id anymore; a client that missed the event removes the entity when it sees that snapshot.</t>
+        <table>
+          <name>Destroy Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>9</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Id</td><td>u32</td><td>4</td><td>The entity that is gone</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="message-player-disconnected">
+        <name>PlayerDisconnected</name>
+        <t>The server tells the remaining clients that the player of a slot left, either with a Leave or by staying
+          silent past the session timeout. The scoreboard of the same step shows the slot as Left.</t>
+        <table>
+          <name>PlayerDisconnected Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>10</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Slot</td><td>u8</td><td>1</td><td>0 to 3</td></tr>
+          </tbody>
+        </table>
+        <t>A slot outside 0 to 3 MUST be rejected.</t>
+      </section>
+
+      <section anchor="message-score-event">
+        <name>ScoreEvent</name>
+        <t>The server announces that a player earned points. The points are already counted in the scoreboard of the
+          same step, which remains the authority on the score.</t>
+        <table>
+          <name>ScoreEvent Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>11</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Slot</td><td>u8</td><td>1</td><td>0 to 3</td></tr>
+            <tr><td>Points</td><td>u32</td><td>4</td><td>Points earned</td></tr>
+          </tbody>
+        </table>
+        <t>A slot outside 0 to 3 MUST be rejected.</t>
+      </section>
+
+      <section anchor="message-death-event">
+        <name>DeathEvent</name>
+        <t>The server announces that a ship or a Bydo was destroyed, and who destroyed it. This is a notification for
+          sounds and effects: the snapshot and the scoreboard of the same step already show the consequence.</t>
+        <table>
+          <name>DeathEvent Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>12</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Id</td><td>u32</td><td>4</td><td>The entity that was destroyed</td></tr>
+            <tr><td>Killer</td><td>u8</td><td>1</td><td>Slot of the player, or 255 for a crash or a Bydo missile</td></tr>
+          </tbody>
+        </table>
+        <t>The killer MUST be 0 to 3 or 255; any other value MUST be rejected.</t>
+      </section>
+
+      <section anchor="message-game-over-event">
+        <name>GameOverEvent</name>
+        <t>The server announces that the game ended, because every player is out of lives or because the boss is
+          beaten. The scoreboard of the same step has its game over byte at 1 or 2. The server sends the event once per
+          game; it sends it again only when a new game ends.</t>
+        <table>
+          <name>GameOverEvent Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>13</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section anchor="message-pick-up-event">
+        <name>PickUpEvent</name>
+        <t>The server announces that the ship of a player took a power-up. This is a notification for effects: the
+          snapshot and the scoreboard of the same step already show the consequence.</t>
+        <table>
+          <name>PickUpEvent Fields</name>
+          <thead><tr><th>Field</th><th>Type</th><th>Bytes</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>u8</td><td>1</td><td>14</td></tr>
+            <tr><td>Tick</td><td>u32</td><td>4</td><td>Step of the server</td></tr>
+            <tr><td>Slot</td><td>u8</td><td>1</td><td>Slot of the player whose ship took it</td></tr>
+            <tr><td>Power-up</td><td>u8</td><td>1</td><td>See <xref target="power-ups"/></td></tr>
+          </tbody>
+        </table>
+        <table anchor="power-ups">
+          <name>Power-ups</name>
+          <thead><tr><th>Name</th><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>ExtraLife</td><td>0</td><td>One more life, up to 5</td></tr>
+            <tr><td>Shield</td><td>1</td><td>Takes the next hit; the ship has 2 health points while it lasts</td></tr>
+            <tr><td>SpreadShot</td><td>2</td><td>The spread shot, until the ship is destroyed</td></tr>
+          </tbody>
+        </table>
+        <t>A slot outside 0 to 3 and a power-up outside 0 to 2 MUST be rejected.</t>
+      </section>
+    </section>
+
+    <section anchor="snapshots">
+      <name>Snapshots and Chunking</name>
+      <t>The game runs on fixed steps of 1/60 s on both sides. The server starts its tick at 0, increases it by one at
+        each step, and wraps it modulo 2^32. A snapshot, the events of the step and the scoreboard all carry the tick
+        of the step they describe.</t>
+      <t>After the 8-byte packet header and the 15-byte snapshot header, 14 bytes per entity fit in a datagram of at
+        most 1200 bytes. Therefore a chunk carries at most 84 entities:</t>
+      <t><tt>floor((1200 - 8 - 15) / 14) = 84</tt></t>
+      <t>A snapshot of n entities is split into <tt>max(1, ceil(n / 84))</tt> chunks, numbered 0 to chunk count minus
+        1. The chunk of index i carries the entities from <tt>i * 84</tt> to <tt>min((i + 1) * 84, n) - 1</tt>, in
+        snapshot order. The count field of the chunk is the number of entities it carries, so the last chunk may be
+        shorter. A snapshot holds at most 64 chunks, or 5376 entities; a larger snapshot is not sent.</t>
+      <t>An empty snapshot is legal: the server sends one chunk with chunk count 1, index 0, entity count 0 and count
+        0. A client MUST treat it as an empty world, not as a missing snapshot.</t>
+      <t>A chunk is valid only when its chunk count is 1 to 64, its index is below its chunk count, its entity count is
+        at most 5376, its chunk count is exactly the one the entity count implies, and its count is exactly the number
+        of entities the index implies. A chunk that breaks one of these rules MUST be dropped. A client reassembles the
+        chunks of one tick, drops a duplicated index, and discards a snapshot whose chunks disagree on the entity count
+        or the chunk count. An incomplete snapshot is discarded when newer ones replace it; the next complete snapshot
+        carries the whole world anyway.</t>
+    </section>
+
+    <section anchor="reliability">
+      <name>Reliability and Ordering</name>
+      <t>The protocol has no acknowledgement and no retransmission of game messages. It relies on two properties:</t>
+      <ul>
+        <li>Every message that carries state carries the whole state of its kind: a snapshot is the whole world and a
+          scoreboard is the whole score. A lost one is replaced by the next one, 1/60 s later.</li>
+        <li>An event only announces a change that the snapshot or the scoreboard of the same step already carries. A
+          lost event delays a sound or an effect, and never changes the game.</li>
+      </ul>
+      <t>Join is the only game message that needs an answer. The client repeats it every 500 ms until a Welcome or a
+        Full arrives. Connect and Heartbeat are repeated by the session layer as described in <xref target="session"/>.</t>
+      <t>Snapshots can arrive out of order. A client keeps the snapshots in the order of their tick, and draws the
+        world a few steps behind the newest snapshot so it can interpolate between two known states. The number of
+        steps of delay is a client choice; it does not change the wire format.</t>
+
+      <section anchor="serial-comparison">
+        <name>Comparing Ticks</name>
+        <t>A tick is a 32-bit counter that wraps. Two ticks are compared with serial number arithmetic
+          <xref target="RFC1982"/>: <tt>a</tt> is newer than <tt>b</tt> when the signed 32-bit value of
+          <tt>a - b</tt> is positive. For example, 0 is newer than 0xFFFFFFFF, and 0xFFFFFFFF is not newer than 0. Two
+          equal ticks are not newer than each other.</t>
+        <t>The server uses this comparison for the tick of an Input. It accepts the first Input of a client, then only
+          an Input whose tick is newer than the last one accepted; a duplicated or reordered Input is dropped. A Join
+          resets the comparison, so a client that starts its ticks again is accepted.</t>
+      </section>
+    </section>
+
+    <section anchor="validation">
+      <name>Validation and Error Handling</name>
+      <t>A receiver validates each layer in order and drops what it cannot accept. It MUST NOT crash, block or
+        allocate without bound on a malformed or hostile datagram.</t>
+
+      <table anchor="decode-errors">
+        <name>Message Decode Errors</name>
+        <thead><tr><th>Reason</th><th>Cause</th></tr></thead>
+        <tbody>
+          <tr><td>Not a game message</td><td>The packet is not a GameData packet</td></tr>
+          <tr><td>Empty</td><td>The payload holds no message type</td></tr>
+          <tr><td>Unknown type</td><td>The type byte is not 1 to 13</td></tr>
+          <tr><td>Truncated</td><td>A field ends after the payload</td></tr>
+          <tr><td>Invalid value</td><td>A slot, a type, a state, an input bit or a float is out of range</td></tr>
+          <tr><td>Trailing bytes</td><td>The payload goes on after the last field</td></tr>
+          <tr><td>Invalid chunk</td><td>The fields of a snapshot chunk do not agree with its entity count</td></tr>
+        </tbody>
+      </table>
+
+      <t>The server drops a datagram whose header fails, then a game message that fails to decode, and counts it. It
+        prints the count and the first reason at most once a second, so a flood cannot flood the log too. A game
+        message from an endpoint without a session is dropped. An Input from an endpoint without a slot is ignored, and
+        an Input whose tick is not newer than the last one accepted is ignored.</t>
+      <t>To bound the work of one receive call, the server handles at most 256 datagrams per call; the rest waits for
+        the next call. It queues at most 256 events per step; an event past that is dropped, and the state still
+        carries the change. Its incoming and outgoing datagram queues hold at most 1024 datagrams, and its session
+        table holds at most 1024 peers.</t>
+      <t>A client applies the same strictness: it drops a datagram from another address than its server, a packet the
+        header rejects, and a game message the decoder rejects. It keeps the snapshots in the order of their tick and
+        never draws the world backwards, so a duplicated or late snapshot has no effect on the picture.</t>
+    </section>
+
+    <section anchor="examples">
+      <name>Example Exchanges</name>
+      <t>The following diagrams show the messages, not every heartbeat or ping. UDP may reorder, duplicate or lose any
+        of them.</t>
+
+      <section anchor="example-join">
+        <name>Joining a Game</name>
+        <figure anchor="join-exchange">
+          <name>Join Exchange</name>
+          <artwork type="ascii-art"><![CDATA[
+Client                                    Server
+  |                                         |
+  | Connect (0x80) ------------------------>|  session opens
+  | <------------------- ConnectAck (0x81)  |
+  |                                         |
+  | Join (type 1) ------------------------->|
+  | <------------ Welcome (type 2, slot 2)  |
+  |                                         |
+  | Input (type 3, tick 0) ---------------->|  each client step
+  | <----------- Snapshot (type 4, tick 0)  |  each server step
+  | <--------- Scoreboard (type 5, tick 0)  |
+          ]]></artwork>
+        </figure>
+        <t>The client repeats Connect until the ConnectAck, then repeats Join every 500 ms until the Welcome. If the
+          four slots are taken, the answer is a Full (type 7) instead of a Welcome, and the client stops.</t>
+      </section>
+
+      <section anchor="example-play">
+        <name>Playing a Step</name>
+        <figure anchor="step-datagrams">
+          <name>The Datagrams of One Server Step</name>
+          <artwork type="ascii-art"><![CDATA[
+Server step tick = t:
+  Snapshot, chunk 0 of 2, tick t   (up to 84 entities)
+  Snapshot, chunk 1 of 2, tick t   (the remaining entities)
+  Spawn, tick t, entity            (an entity appeared)
+  Destroy, tick t, id              (an entity is gone)
+  ScoreEvent, tick t, slot, points (a player earned points)
+  DeathEvent, tick t, id, killer   (a ship or a Bydo was destroyed)
+  PickUpEvent, tick t, slot, kind  (a ship took a power-up)
+  GameOverEvent, tick t            (the game ended)
+  Scoreboard, tick t               (the whole score, four slots)
+          ]]></artwork>
+        </figure>
+        <t>Only the snapshot and the scoreboard are states. The events of a step are sent after the snapshot and before
+          the scoreboard, all with the same tick. A client that misses them still sees their result in the state of the
+          same step.</t>
+      </section>
+
+      <section anchor="example-disconnect">
+        <name>Leaving and Timing Out</name>
+        <figure anchor="leave-exchange">
+          <name>Leave Exchange</name>
+          <artwork type="ascii-art"><![CDATA[
+Client                     Server                 Other clients
+  | Leave (type 6) -------->|                        |
+  |                        | frees the slot, destroys the ship
+  |                        | PlayerDisconnected --->|
+  |                        | Scoreboard, Left ------>|
+  |                        |                        |
+  | (no Leave, 3 s silent) | sweep: same events     |
+          ]]></artwork>
+        </figure>
+        <t>A client that closes without sending Leave is removed by the session timeout after 3000 ms. The remaining
+          clients see the same PlayerDisconnected event and the same Left scoreboard. When no client is left, the
+          server starts a new game for the next players.</t>
+      </section>
+    </section>
+
+    <section anchor="security">
+      <name>Security Considerations</name>
+      <t>The protocol has no authentication and no encryption. A player is identified by the source address of its
+        datagrams, and a UDP source address can be written by anyone. Someone who knows the address of a player can
+        send Inputs or a Leave in their name, and an Internet-reachable server can be filled with fake sessions or fake
+        players until the four slots are taken. The protocol is meant for a game on a local network.</t>
+      <t>The server is authoritative: a client sends only the five input bits, its own tick and its own Join or Leave.
+        It cannot set a position, a health, a score, a killer or a slot on the wire. The server computes the game from
+        the inputs it accepts.</t>
+      <t>A receiver bounds what an incoming datagram can make it allocate: the packet size is limited to 1200 bytes,
+        the snapshot entity count to 5376, the session table to 1024 peers, the datagram queues to 1024 entries, and
+        the events of a step to 256. A malformed datagram is dropped and counted, and its processing never throws.</t>
+      <t>The server logs the address of a joining player and a rate-limited summary of rejected datagrams. It logs no
+        payload and keeps no log file; an operator who needs more keeps the standard output or adds counters.</t>
+    </section>
+
+    <section anchor="iana">
+      <name>IANA Considerations</name>
+      <t>This document has no IANA actions.</t>
+    </section>
+
+  </middle>
+
+  <back>
+    <references>
+      <name>References</name>
+      <reference anchor="RFC768" target="https://www.rfc-editor.org/info/rfc768">
+        <front>
+          <title>User Datagram Protocol</title>
+          <author fullname="J. Postel"/>
+          <date month="August" year="1980"/>
+        </front>
+        <seriesInfo name="STD" value="6"/>
+        <seriesInfo name="RFC" value="768"/>
+      </reference>
+      <reference anchor="RFC1982" target="https://www.rfc-editor.org/info/rfc1982">
+        <front>
+          <title>Serial Number Arithmetic</title>
+          <author fullname="R. Elz"/>
+          <author fullname="R. Bush"/>
+          <date month="August" year="1996"/>
+        </front>
+        <seriesInfo name="RFC" value="1982"/>
+      </reference>
+      <reference anchor="RFC2119" target="https://www.rfc-editor.org/info/rfc2119">
+        <front>
+          <title>Key words for use in RFCs to Indicate Requirement Levels</title>
+          <author fullname="S. Bradner"/>
+          <date month="March" year="1997"/>
+        </front>
+        <seriesInfo name="BCP" value="14"/>
+        <seriesInfo name="RFC" value="2119"/>
+      </reference>
+      <reference anchor="RFC8174" target="https://www.rfc-editor.org/info/rfc8174">
+        <front>
+          <title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title>
+          <author fullname="B. Leiba"/>
+          <date month="May" year="2017"/>
+        </front>
+        <seriesInfo name="BCP" value="14"/>
+        <seriesInfo name="RFC" value="8174"/>
+      </reference>
+      <reference anchor="IEEE754" target="https://doi.org/10.1109/IEEESTD.2019.8766229">
+        <front>
+          <title>IEEE Standard for Floating-Point Arithmetic</title>
+          <author fullname="IEEE"/>
+          <date month="July" year="2019"/>
+        </front>
+        <seriesInfo name="IEEE" value="754-2019"/>
+      </reference>
+    </references>
+
+    <section anchor="acknowledgments" numbered="false">
+      <name>Acknowledgments</name>
+      <t>The protocol was designed with the rest of the J-Type team, and its implementation is checked against the
+        codec tests and the fuzzing harness of the project.</t>
+    </section>
+  </back>
+
+</rfc>

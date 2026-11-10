@@ -1,0 +1,2 @@
+-- Does not compile
+return {

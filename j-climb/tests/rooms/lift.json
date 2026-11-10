@@ -1,0 +1,22 @@
+{
+  "format": "younity-scene",
+  "version": 2,
+  "entities": [
+    {
+      "id": 0,
+      "components": {
+        "Script": {
+          "path": "../tests/rooms/lift.lua"
+        }
+      }
+    },
+    {
+      "id": 1,
+      "components": {
+        "Script": {
+          "path": "scripts/game.lua"
+        }
+      }
+    }
+  ]
+}

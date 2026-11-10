@@ -1,0 +1,133 @@
+site_name: Younity Engine
+site_description: Documentation of Younity, a modular 2D game engine written in C++23.
+repo_url: https://github.com/Rimapus/r-type
+repo_name: Rimapus/r-type
+edit_uri: ""
+# Kept beside the pages, left out of the published website
+exclude_docs: |
+  requirements.txt
+  hooks/
+
+# Writes the version of CMakeLists.txt in place of {{ younity_version }}
+hooks:
+  - docs/hooks/version.py
+
+theme:
+  name: material
+  language: en
+  logo: assets/younity_engine_icon_16bit_x6.png
+  favicon: assets/younity_engine_icon_16bit_x6.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+  - mkdoxy:
+      projects:
+        api:
+          src-dirs: modules
+          full-doc: True
+          doxy-cfg:
+            FILE_PATTERNS: "*.hpp"
+            RECURSIVE: True
+            EXTRACT_ALL: True
+            EXTRACT_PRIVATE: False
+            # The graphics library is private to the engine: its forward declarations stay out of the reference
+            EXCLUDE_SYMBOLS: "sf"
+            # Show the includes as a game writes them: younity/ecs/Registry.hpp
+            STRIP_FROM_INC_PATH: "modules/logger/include modules/core/include modules/tools/include modules/plugin/include modules/ecs/include modules/scripting/include modules/physics/include modules/assets/include modules/render/include modules/input/include modules/audio/include modules/network/include modules/editor/include"
+      save-api: .mkdoxy
+      full-doc: True
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/index.md
+      - Run the tests: getting-started/tests.md
+      - Use it in your game: getting-started/use-in-a-game.md
+  - Architecture:
+      - architecture/index.md
+      - A frame, step by step: architecture/frame.md
+      - Core: architecture/core.md
+      - Tools: architecture/tools.md
+      - Plugin: architecture/plugin.md
+      - ECS: architecture/ecs.md
+      - Scripting: architecture/scripting.md
+      - Physics: architecture/physics.md
+      - Assets: architecture/assets.md
+      - Input: architecture/input.md
+      - Render: architecture/render.md
+      - Audio: architecture/audio.md
+      - Network: architecture/network.md
+      - Editor: architecture/editor.md
+      - Logger: architecture/logger.md
+      - Design decisions: architecture/decisions.md
+  - Guides:
+      - guides/index.md
+      - Your first entity and system: guides/first-entity.md
+      - Write a game in Lua: guides/lua-game.md
+  - Technical study:
+      - study/index.md
+      - Technologies: study/technologies.md
+      - Algorithms and data structures: study/algorithms.md
+      - Storage: study/storage.md
+      - Security: study/security.md
+  - Contributing:
+      - contributing/index.md
+      - Code style: contributing/code-style.md
+      - Writing the documentation: contributing/documentation.md
+  - API reference:
+      - Classes: api/annotated.md
+      - Class hierarchy: api/hierarchy.md
+      - Namespaces: api/namespaces.md
+      - Files: api/files.md

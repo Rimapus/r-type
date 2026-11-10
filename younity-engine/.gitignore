@@ -1,0 +1,9 @@
+build/
+.cache/
+compile_commands.json
+.DS_Store
+
+site/
+.mkdoxy/
+.venv/
+__pycache__/

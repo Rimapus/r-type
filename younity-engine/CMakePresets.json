@@ -1,0 +1,51 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "Younity standalone (Debug)",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "FETCHCONTENT_BASE_DIR": "${sourceDir}/.cache/deps/${presetName}"
+            }
+        },
+        {
+            "name": "tests",
+            "inherits": "default",
+            "displayName": "Younity with the Criterion unit tests (Debug)",
+            "cacheVariables": {
+                "YOUNITY_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "coverage",
+            "inherits": "tests",
+            "displayName": "Younity with the Criterion unit tests and gcovr coverage (Debug)",
+            "cacheVariables": {
+                "YOUNITY_COVERAGE": "ON"
+            }
+        },
+        {
+            "name": "fuzz",
+            "inherits": "default",
+            "displayName": "Younity with the LibFuzzer harnesses (needs Clang)",
+            "cacheVariables": {
+                "YOUNITY_BUILD_FUZZERS": "ON",
+                "YOUNITY_BUILD_RENDER": "OFF",
+                "YOUNITY_BUILD_INPUT": "OFF",
+                "YOUNITY_BUILD_AUDIO": "OFF",
+                "YOUNITY_BUILD_EDITOR": "OFF",
+                "CMAKE_CXX_FLAGS": "-fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "default", "configurePreset": "default" },
+        { "name": "tests", "configurePreset": "tests", "targets": ["tests_run"] },
+        { "name": "coverage", "configurePreset": "coverage" },
+        { "name": "fuzz", "configurePreset": "fuzz", "targets": ["fuzz_packet"] }
+    ]
+}

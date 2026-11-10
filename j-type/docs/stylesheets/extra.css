@@ -1,0 +1,74 @@
+/* The colors of the Younity documentation, for one look across both websites, checked for a contrast of 4.5:1 or more */
+:root {
+  --md-primary-fg-color: #182131;
+  --md-primary-fg-color--light: #31314a;
+  --md-primary-fg-color--dark: #100818;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #0f6f85;
+  --md-accent-bg-color: #ffffff;
+  --md-typeset-a-color: #0f6f85;
+}
+
+[data-md-color-scheme="default"] {
+  --md-typeset-a-color: #0f6f85;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 228;
+  --md-accent-fg-color: #84d6ff;
+  --md-accent-bg-color: #100818;
+  --md-typeset-a-color: #84d6ff;
+}
+
+/* The logo and the icon are pixel art: their pixels stay sharp at any size */
+.md-header__button.md-logo img,
+.hero-logo {
+  image-rendering: pixelated;
+}
+
+.md-header__button.md-logo img {
+  height: 1.6rem;
+  width: 1.6rem;
+}
+
+/* Buttons use the accent color, readable on both the light and the dark background */
+.md-typeset .md-button {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.md-typeset .md-button--primary,
+.md-typeset .md-button:focus,
+.md-typeset .md-button:hover {
+  background-color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}
+
+/* Home page */
+.hero {
+  text-align: center;
+  padding: 1.5rem 0 0.5rem;
+}
+
+.hero-logo {
+  width: min(26rem, 90%);
+}
+
+/* The logo is drawn for a dark background: on the light theme it sits on a plate of the header color */
+[data-md-color-scheme="default"] .hero-logo {
+  background-color: var(--md-primary-fg-color);
+  border-radius: 0.4rem;
+  box-sizing: border-box;
+  padding: 1rem 1.5rem;
+}
+
+.hero p {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 34rem;
+}
+
+.hero .md-button {
+  margin: 0.25rem;
+}

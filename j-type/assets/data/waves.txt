@@ -1,0 +1,51 @@
+# The waves of Bydos of a game, played in order, then again faster; beating the boss of a wave wins the game.
+# "wave <pause>" starts a wave <pause> seconds after the last Bydo of the wave before is destroyed or gone.
+# Each line after it brings a group: <type> <pattern> <count> <delay between two, in seconds> [<formation> <height>]
+# [drop], an obstacle: "wall <top> <bottom>" or "zapper <top> <bottom>", or the boss: "boss incubator".
+# With drop, the last Bydo of the group leaves a power-up when it is shot. A wall of blocks breaks under the missiles,
+# a zapper does not; both scroll with the stage, and their heights go from 0, the ceiling, to 1, the floor.
+# Types: blobling, jelly, sentry_drone. Patterns: straight, sine_wave, chase.
+# Formations: random (the default, without a height), line, column, v. The height goes from 0 (top) to 1 (bottom).
+# A Blobling only flies, a Jelly shoots straight and a Sentry drone aims: the first waves bring one type at a time.
+
+# Bloblings: aim, then move to aim
+wave 2
+blobling straight 5 0.6 line 0.5
+
+wave 2
+blobling straight 4 0.6 line 0.25
+blobling straight 4 0.6 line 0.75
+
+wave 2
+blobling straight 5 0 v 0.5 drop
+
+# Jellies: leave their line, they shoot along it
+wave 3
+jelly straight 3 1.2 line 0.5
+zapper 0 0.3
+
+wave 2
+jelly sine_wave 4 1.0 line 0.3 drop
+blobling straight 4 0 column 0.75
+
+# Sentry drones: they chase and aim, then fly away
+wave 3
+sentry_drone chase 2 1.5
+wall 0.55 1
+
+# Everything together
+wave 2
+blobling sine_wave 6 0.5 line 0.5 drop
+jelly straight 2 1.5 line 0.15
+jelly straight 2 1.5 line 0.85
+zapper 0.7 1
+
+wave 3
+blobling straight 5 0 v 0.3 drop
+jelly sine_wave 3 0.9 line 0.75
+sentry_drone chase 2 2.0
+wall 0 0.4
+
+# The boss: its armor stops the missiles, shoot its eye
+wave 4
+boss incubator

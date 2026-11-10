@@ -1,0 +1,1288 @@
+
+
+
+
+J-Type                                                          M. Tutti
+                                                             M. Yildirim
+                                                             V. Zarrillo
+                                                                 EPITECH
+                                                           November 2026
+
+
+                        J-Type Network Protocol
+                        draft-jtype-protocol-00
+
+Abstract
+
+   This document specifies the UDP protocol between the J-Type server
+   and its clients.  It defines the packet header, the session handshake
+   and keepalive, every game message, the way a snapshot is split into
+   datagrams, and the rules a receiver applies to what it accepts.  It
+   is the reference for writing another client for a J-Type server.
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . . .   2
+     1.1.  Requirements Language . . . . . . . . . . . . . . . . . .   2
+     1.2.  Scope . . . . . . . . . . . . . . . . . . . . . . . . . .   2
+   2.  Transport and Framing . . . . . . . . . . . . . . . . . . . .   2
+   3.  Packet Header . . . . . . . . . . . . . . . . . . . . . . . .   3
+   4.  Session . . . . . . . . . . . . . . . . . . . . . . . . . . .   4
+     4.1.  Handshake . . . . . . . . . . . . . . . . . . . . . . . .   4
+     4.2.  Keepalive . . . . . . . . . . . . . . . . . . . . . . . .   5
+   5.  Game Messages . . . . . . . . . . . . . . . . . . . . . . . .   5
+     5.1.  Entity State  . . . . . . . . . . . . . . . . . . . . . .   6
+     5.2.  Join  . . . . . . . . . . . . . . . . . . . . . . . . . .   9
+     5.3.  Welcome . . . . . . . . . . . . . . . . . . . . . . . . .   9
+     5.4.  Input . . . . . . . . . . . . . . . . . . . . . . . . . .   9
+     5.5.  Snapshot  . . . . . . . . . . . . . . . . . . . . . . . .  10
+     5.6.  Scoreboard  . . . . . . . . . . . . . . . . . . . . . . .  11
+     5.7.  Leave . . . . . . . . . . . . . . . . . . . . . . . . . .  13
+     5.8.  Full  . . . . . . . . . . . . . . . . . . . . . . . . . .  13
+     5.9.  Spawn . . . . . . . . . . . . . . . . . . . . . . . . . .  14
+     5.10. Destroy . . . . . . . . . . . . . . . . . . . . . . . . .  14
+     5.11. PlayerDisconnected  . . . . . . . . . . . . . . . . . . .  14
+     5.12. ScoreEvent  . . . . . . . . . . . . . . . . . . . . . . .  15
+     5.13. DeathEvent  . . . . . . . . . . . . . . . . . . . . . . .  15
+     5.14. GameOverEvent . . . . . . . . . . . . . . . . . . . . . .  16
+     5.15. PickUpEvent . . . . . . . . . . . . . . . . . . . . . . .  16
+   6.  Snapshots and Chunking  . . . . . . . . . . . . . . . . . . .  17
+   7.  Reliability and Ordering  . . . . . . . . . . . . . . . . . .  18
+     7.1.  Comparing Ticks . . . . . . . . . . . . . . . . . . . . .  19
+   8.  Validation and Error Handling . . . . . . . . . . . . . . . .  19
+
+
+
+Tutti, et al.                 Informational                     [Page 1]
+
+                             J-Type Protocol               November 2026
+
+
+   9.  Example Exchanges . . . . . . . . . . . . . . . . . . . . . .  20
+     9.1.  Joining a Game  . . . . . . . . . . . . . . . . . . . . .  20
+     9.2.  Playing a Step  . . . . . . . . . . . . . . . . . . . . .  20
+     9.3.  Leaving and Timing Out  . . . . . . . . . . . . . . . . .  21
+   10. Security Considerations . . . . . . . . . . . . . . . . . . .  21
+   11. IANA Considerations . . . . . . . . . . . . . . . . . . . . .  22
+   12. References  . . . . . . . . . . . . . . . . . . . . . . . . .  22
+   Acknowledgments . . . . . . . . . . . . . . . . . . . . . . . . .  22
+   Authors' Addresses  . . . . . . . . . . . . . . . . . . . . . . .  22
+
+1.  Introduction
+
+   J-Type is a networked shoot'em up for up to four players.  One server
+   owns the game: it moves the ships, decides what the missiles hit,
+   keeps the score and sends the world to every client.  A client reads
+   the keys, sends them, and draws what the server sends.  This document
+   describes the bytes they exchange.
+
+   The engine provides the datagram envelope and the session layer.  The
+   game puts one message in each GameData packet.  The protocol is state
+   based: the server repeats the whole world and the whole score at
+   every step, and the events only announce a change that the state of
+   the same step already carries.
+
+1.1.  Requirements Language
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+   "OPTIONAL" in this document are to be interpreted as described in BCP
+   14 [RFC2119] [RFC8174] when, and only when, they appear in all
+   capitals, as shown here.
+
+1.2.  Scope
+
+   This document covers version 1 of the protocol.  It does not describe
+   the rules of the game, the assets, the rendering, or the C++ API of
+   the implementation.  The values of the game, such as the points a
+   Bydo is worth, are part of the game and not of the wire format.
+
+2.  Transport and Framing
+
+   The protocol runs over UDP [RFC768].  A datagram carries exactly one
+   packet.  IP fragmentation is avoided: a datagram MUST NOT exceed 1200
+   bytes including the packet header, so it fits in the usual 1500-byte
+   Ethernet MTU after the IP and UDP headers.
+
+
+
+
+
+
+Tutti, et al.                 Informational                     [Page 2]
+
+                             J-Type Protocol               November 2026
+
+
+   UDP does not deliver, order or deduplicate datagrams.  A receiver
+   MUST tolerate loss, reordering and duplication.  The protocol does
+   not retransmit lost game messages: the next state makes up for a lost
+   one, as described in Section 7.
+
+   All multi-byte integer fields are unsigned and encoded in little-
+   endian order, least significant byte first.  Floating-point fields
+   are IEEE 754 binary32 values [IEEE754], also little-endian.  A
+   receiver MUST reject a non-finite floating-point field.
+
+3.  Packet Header
+
+   Every datagram starts with the 8-byte header of the engine.  The
+   fields are:
+
+      +==========+======+=======+===================================+
+      | Field    | Type | Bytes | Value                             |
+      +==========+======+=======+===================================+
+      | Magic    | u16  | 2     | 0x3659, the bytes 0x59 0x36, "Y6" |
+      +----------+------+-------+-----------------------------------+
+      | Version  | u8   | 1     | 1                                 |
+      +----------+------+-------+-----------------------------------+
+      | Type     | u8   | 1     | See Table 2                       |
+      +----------+------+-------+-----------------------------------+
+      | Sequence | u32  | 4     | Sequence number of the sender     |
+      +----------+------+-------+-----------------------------------+
+
+                       Table 1: Packet Header Fields
+
+   The magic number rejects traffic from another application before any
+   parsing.  A datagram whose magic, version or type is unknown, that is
+   shorter than the header, or that is longer than 1200 bytes MUST be
+   dropped silently.  The sequence number is a counter of the sender for
+   each peer, starting at 0, increased by one for each packet sent to
+   that peer, session packets and game messages alike, and wrapping
+   modulo 2^32.  It lets the peer detect loss; the protocol does not
+   acknowledge or retransmit game messages.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                     [Page 3]
+
+                             J-Type Protocol               November 2026
+
+
+        +============+=======+====================+===============+
+        | Name       | Value | Payload            | Purpose       |
+        +============+=======+====================+===============+
+        | GameData   | 0x01  | One game message,  | Carries the   |
+        |            |       | see Section 5      | game          |
+        +------------+-------+--------------------+---------------+
+        | Ping       | 0x02  | u32 cookie         | Measures a    |
+        |            |       |                    | round trip    |
+        +------------+-------+--------------------+---------------+
+        | Pong       | 0x03  | u32 cookie, copied | Answers a     |
+        |            |       | from the Ping      | Ping          |
+        +------------+-------+--------------------+---------------+
+        | Connect    | 0x80  | Empty              | Opens a       |
+        |            |       |                    | session       |
+        +------------+-------+--------------------+---------------+
+        | ConnectAck | 0x81  | Empty              | Accepts a     |
+        |            |       |                    | session       |
+        +------------+-------+--------------------+---------------+
+        | Heartbeat  | 0x82  | Empty              | Keeps a       |
+        |            |       |                    | session alive |
+        +------------+-------+--------------------+---------------+
+
+                           Table 2: Packet Types
+
+   A Ping or a Pong MUST carry exactly 4 payload bytes; a Connect, a
+   ConnectAck or a Heartbeat MUST carry none.  A packet that breaks
+   these rules MUST be dropped.  The payload of a GameData packet is
+   decoded as described in Section 5.
+
+4.  Session
+
+   The session layer keeps track of the peers and of their liveness.  A
+   client MUST NOT send a game message before its session is open, and a
+   server MUST drop a game message that comes from an endpoint without a
+   session.
+
+4.1.  Handshake
+
+   The client sends a Connect and waits for a ConnectAck.  It repeats
+   the Connect until the server answers, so a lost Connect or ConnectAck
+   only delays the handshake.  The server answers every Connect from a
+   known or a new endpoint with a ConnectAck and a Connect resets the
+   sequence number that the server uses for that endpoint to 0.
+
+   The server keeps at most 1024 sessions.  A Connect from a new
+   endpoint while the table is full is dropped without an answer.  A
+   session ends when the peer stays silent for 3000 ms; a Leave frees
+   the player's slot at once, without waiting for the timeout.
+
+
+
+Tutti, et al.                 Informational                     [Page 4]
+
+                             J-Type Protocol               November 2026
+
+
+4.2.  Keepalive
+
+   Once the session is open, the client sends a Heartbeat every 500 ms.
+   The server answers each Heartbeat with a Heartbeat, so the client
+   keeps hearing from the server even when the game sends nothing.  A
+   peer MAY also send a Ping every 1000 ms; the peer answers with a Pong
+   carrying the same cookie, and the sender measures the round trip.
+
+   Any valid packet from a known peer refreshes its session, not only a
+   Heartbeat.  A heartbeat interval is shorter than the timeout, so
+   several heartbeats fit in one timeout and a single lost datagram does
+   not end a healthy session.
+
+5.  Game Messages
+
+   A GameData payload holds exactly one game message.  Its first byte is
+   the message type; the fields follow, in the order of this document.
+   A decoder MUST reject an empty payload, an unknown type, a field that
+   runs past the payload, a value outside its range, and a payload with
+   bytes left after the last field.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                     [Page 5]
+
+                             J-Type Protocol               November 2026
+
+
+     +====================+=======+==================+===============+
+     | Message            | Value | Direction        | Payload bytes |
+     +====================+=======+==================+===============+
+     | Join               | 1     | Client to server | 1             |
+     +--------------------+-------+------------------+---------------+
+     | Welcome            | 2     | Server to client | 2             |
+     +--------------------+-------+------------------+---------------+
+     | Input              | 3     | Client to server | 6             |
+     +--------------------+-------+------------------+---------------+
+     | Snapshot           | 4     | Server to client | 15 + 14n      |
+     +--------------------+-------+------------------+---------------+
+     | Scoreboard         | 5     | Server to client | 34            |
+     +--------------------+-------+------------------+---------------+
+     | Leave              | 6     | Client to server | 1             |
+     +--------------------+-------+------------------+---------------+
+     | Full               | 7     | Server to client | 1             |
+     +--------------------+-------+------------------+---------------+
+     | Spawn              | 8     | Server to client | 19            |
+     +--------------------+-------+------------------+---------------+
+     | Destroy            | 9     | Server to client | 9             |
+     +--------------------+-------+------------------+---------------+
+     | PlayerDisconnected | 10    | Server to client | 6             |
+     +--------------------+-------+------------------+---------------+
+     | ScoreEvent         | 11    | Server to client | 10            |
+     +--------------------+-------+------------------+---------------+
+     | DeathEvent         | 12    | Server to client | 10            |
+     +--------------------+-------+------------------+---------------+
+     | GameOverEvent      | 13    | Server to client | 5             |
+     +--------------------+-------+------------------+---------------+
+     | PickUpEvent        | 14    | Server to client | 7             |
+     +--------------------+-------+------------------+---------------+
+
+                        Table 3: Game Message Types
+
+5.1.  Entity State
+
+   A snapshot and a Spawn event carry entities in this 14-byte form:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                     [Page 6]
+
+                             J-Type Protocol               November 2026
+
+
+   +========+======+=======+===========================================+
+   | Field  | Type | Bytes | Value                                     |
+   +========+======+=======+===========================================+
+   | Id     | u32  | 4     | Identity of the entity                    |
+   |        |      |       | for the whole game                        |
+   +--------+------+-------+-------------------------------------------+
+   | Type   | u8   | 1     | See Table 5                               |
+   +--------+------+-------+-------------------------------------------+
+   | X      | f32  | 4     | Horizontal position, in                   |
+   |        |      |       | world pixels                              |
+   +--------+------+-------+-------------------------------------------+
+   | Y      | f32  | 4     | Vertical position, in                     |
+   |        |      |       | world pixels                              |
+   +--------+------+-------+-------------------------------------------+
+   | Health | u8   | 1     | Health points left, 0 for                 |
+   |        |      |       | an entity without health                  |
+   +--------+------+-------+-------------------------------------------+
+
+                        Table 4: Entity State Fields
+
+   +===================+=======+======================================+
+   | Name              | Value | Meaning                              |
+   +===================+=======+======================================+
+   | Player1           | 0     | Ship of the player of slot 0         |
+   +-------------------+-------+--------------------------------------+
+   | Player2           | 1     | Ship of the player of slot 1         |
+   +-------------------+-------+--------------------------------------+
+   | Player3           | 2     | Ship of the player of slot 2         |
+   +-------------------+-------+--------------------------------------+
+   | Player4           | 3     | Ship of the player of slot 3         |
+   +-------------------+-------+--------------------------------------+
+   | Missile1          | 4     | Missile of the player of slot 0      |
+   +-------------------+-------+--------------------------------------+
+   | Missile2          | 5     | Missile of the player of slot 1      |
+   +-------------------+-------+--------------------------------------+
+   | Missile3          | 6     | Missile of the player of slot 2      |
+   +-------------------+-------+--------------------------------------+
+   | Missile4          | 7     | Missile of the player of slot 3      |
+   +-------------------+-------+--------------------------------------+
+   | EnemyMissile      | 8     | Missile of a Bydo                    |
+   +-------------------+-------+--------------------------------------+
+   | Blobling          | 9     | Bydo with one health point           |
+   +-------------------+-------+--------------------------------------+
+   | Jelly             | 10    | Bydo with two health points          |
+   +-------------------+-------+--------------------------------------+
+   | SentryDrone       | 11    | Bydo with three health points        |
+   +-------------------+-------+--------------------------------------+
+   | Explosion         | 12    | Ship or Bydo that was just destroyed |
+
+
+
+Tutti, et al.                 Informational                     [Page 7]
+
+                             J-Type Protocol               November 2026
+
+
+   +-------------------+-------+--------------------------------------+
+   | IncubatorBody     | 13    | Armored body of the boss             |
+   +-------------------+-------+--------------------------------------+
+   | IncubatorEye      | 14    | Eye of the boss, the part the        |
+   |                   |       | players can hurt                     |
+   +-------------------+-------+--------------------------------------+
+   | IncubatorEyeAngry | 15    | Eye of the boss once it lost half of |
+   |                   |       | its health                           |
+   +-------------------+-------+--------------------------------------+
+   | IncubatorOrb      | 16    | Orb the boss fires at a player       |
+   +-------------------+-------+--------------------------------------+
+   | IncubatorSpit     | 17    | Spit of a fan the boss fires         |
+   +-------------------+-------+--------------------------------------+
+   | IncubatorWreck    | 18    | Boss that was just destroyed         |
+   +-------------------+-------+--------------------------------------+
+   | SpreadPellet1     | 19    | Pellet of the spread shot of the     |
+   |                   |       | player of slot 0                     |
+   +-------------------+-------+--------------------------------------+
+   | SpreadPellet2     | 20    | Pellet of the spread shot of the     |
+   |                   |       | player of slot 1                     |
+   +-------------------+-------+--------------------------------------+
+   | SpreadPellet3     | 21    | Pellet of the spread shot of the     |
+   |                   |       | player of slot 2                     |
+   +-------------------+-------+--------------------------------------+
+   | SpreadPellet4     | 22    | Pellet of the spread shot of the     |
+   |                   |       | player of slot 3                     |
+   +-------------------+-------+--------------------------------------+
+   | ExtraLifePowerUp  | 23    | Power-up that gives a life           |
+   +-------------------+-------+--------------------------------------+
+   | ShieldPowerUp     | 24    | Power-up that gives a shield         |
+   +-------------------+-------+--------------------------------------+
+   | SpreadShotPowerUp | 25    | Power-up that gives the spread shot  |
+   +-------------------+-------+--------------------------------------+
+   | Block             | 26    | Block of a wall                      |
+   +-------------------+-------+--------------------------------------+
+   | CrackedBlock      | 27    | Block of a wall that took a hit      |
+   +-------------------+-------+--------------------------------------+
+   | ZapperNode        | 28    | End of a zapper                      |
+   +-------------------+-------+--------------------------------------+
+   | ZapperBeam        | 29    | Piece of the beam of a zapper        |
+   +-------------------+-------+--------------------------------------+
+
+                          Table 5: Entity Types
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                     [Page 8]
+
+                             J-Type Protocol               November 2026
+
+
+   A type outside this table MUST be rejected.  The id of an entity is
+   stable while it exists; once it is destroyed, the server may give the
+   same id to a new entity.  A receiver MUST therefore treat a Destroy
+   event or the disappearance of an id from a snapshot as the end of
+   that entity, and a Spawn event as the start of a new one.
+
+5.2.  Join
+
+   The client sends a Join once its session is open, and repeats it
+   every 500 ms until the server answers with a Welcome or a Full.  A
+   client that already holds a slot gets that slot in a new Welcome.  A
+   Join starts a new stream of inputs: the server forgets the last input
+   step it accepted from the client.
+
+                     +=======+======+=======+=======+
+                     | Field | Type | Bytes | Value |
+                     +=======+======+=======+=======+
+                     | Type  | u8   | 1     | 1     |
+                     +-------+------+-------+-------+
+
+                           Table 6: Join Fields
+
+5.3.  Welcome
+
+   The server answers a Join with the slot of the player.  A new client
+   gets the first free slot, from 0 to 3; a client that already has a
+   slot gets it again.
+
+                     +=======+======+=======+========+
+                     | Field | Type | Bytes | Value  |
+                     +=======+======+=======+========+
+                     | Type  | u8   | 1     | 2      |
+                     +-------+------+-------+--------+
+                     | Slot  | u8   | 1     | 0 to 3 |
+                     +-------+------+-------+--------+
+
+                          Table 7: Welcome Fields
+
+   A slot outside 0 to 3 MUST be rejected.
+
+5.4.  Input
+
+   The client sends its input at each of its steps.  The payload holds
+   the keys held down and the step of the client.  The server applies an
+   input to the ship of the slot that owns the endpoint; the wire
+   carries no slot, so a client cannot move another player's ship.
+
+
+
+
+
+Tutti, et al.                 Informational                     [Page 9]
+
+                             J-Type Protocol               November 2026
+
+
+             +========+======+=======+======================+
+             | Field  | Type | Bytes | Value                |
+             +========+======+=======+======================+
+             | Type   | u8   | 1     | 3                    |
+             +--------+------+-------+----------------------+
+             | Inputs | u8   | 1     | Bitmask, see Table 9 |
+             +--------+------+-------+----------------------+
+             | Tick   | u32  | 4     | Step of the client   |
+             +--------+------+-------+----------------------+
+
+                          Table 8: Input Fields
+
+                          +=====+======+========+
+                          | Bit | Mask | Action |
+                          +=====+======+========+
+                          | 0   | 0x01 | Up     |
+                          +-----+------+--------+
+                          | 1   | 0x02 | Down   |
+                          +-----+------+--------+
+                          | 2   | 0x04 | Left   |
+                          +-----+------+--------+
+                          | 3   | 0x08 | Right  |
+                          +-----+------+--------+
+                          | 4   | 0x10 | Shoot  |
+                          +-----+------+--------+
+
+                            Table 9: Input Bits
+
+   A bit outside 0x1F MUST be rejected.  The client starts its tick at 1
+   and increases it by one for each Input it sends; the counter wraps
+   modulo 2^32.  The server keeps the last tick it accepted for the
+   client, resets it on a Join, and drops an Input whose tick is not
+   newer under the serial comparison of Section 7.  The server applies
+   the input to the ship during the next step, and gives its tick back
+   in the Last input field of the snapshots it sends to that client.
+
+5.5.  Snapshot
+
+   The server sends a snapshot at each of its steps.  A snapshot is the
+   whole world: every entity the clients must draw.  When the entities
+   do not fit in one datagram, the server splits the snapshot into
+   chunks, as described in Section 6; every chunk carries the same tick,
+   the same last input and the same counts.
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 10]
+
+                             J-Type Protocol               November 2026
+
+
+   The Last input field is the tick of the last Input the server
+   accepted from the client the snapshot is sent to, or 0 before the
+   first one.  The ship of that client has moved with this input, so the
+   client can draw its own ship from the snapshot moved again by the
+   inputs it sent since.
+
+     +==========+===============+=======+============================+
+     | Field    | Type          | Bytes | Value                      |
+     +==========+===============+=======+============================+
+     | Type     | u8            | 1     | 4                          |
+     +----------+---------------+-------+----------------------------+
+     | Tick     | u32           | 4     | Step of the server         |
+     +----------+---------------+-------+----------------------------+
+     | Last     | u32           | 4     | Tick of the last Input     |
+     | input    |               |       | accepted from this client, |
+     |          |               |       | 0 before the first         |
+     +----------+---------------+-------+----------------------------+
+     | Chunk    | u8            | 1     | 0 to chunk count minus 1   |
+     | index    |               |       |                            |
+     +----------+---------------+-------+----------------------------+
+     | Chunk    | u8            | 1     | Number of datagrams of     |
+     | count    |               |       | this snapshot, at least 1  |
+     +----------+---------------+-------+----------------------------+
+     | Entity   | u16           | 2     | Entities of the whole      |
+     | count    |               |       | snapshot                   |
+     +----------+---------------+-------+----------------------------+
+     | Count    | u16           | 2     | Entities in this chunk     |
+     +----------+---------------+-------+----------------------------+
+     | Entities | EntityState[] | 14n   | The entities of this       |
+     |          |               |       | chunk, in snapshot order   |
+     +----------+---------------+-------+----------------------------+
+
+                         Table 10: Snapshot Fields
+
+5.6.  Scoreboard
+
+   The server sends the scoreboard after the events of each step.  It
+   always holds the four slots, in order, so its size is fixed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 11]
+
+                             J-Type Protocol               November 2026
+
+
+    +=======+=================+=======+===============================+
+    | Field | Type            | Bytes | Value                         |
+    +=======+=================+=======+===============================+
+    | Type  | u8              | 1     | 5                             |
+    +-------+-----------------+-------+-------------------------------+
+    | Tick  | u32             | 4     | Step of the server            |
+    +-------+-----------------+-------+-------------------------------+
+    | Game  | u8              | 1     | 0 while the game runs, 1 once |
+    | over  |                 |       | every player is out of lives, |
+    |       |                 |       | 2 once the boss is beaten     |
+    +-------+-----------------+-------+-------------------------------+
+    | Slots | PlayerStatus[4] | 28    | Four entries of 7 bytes, see  |
+    |       |                 |       | below                         |
+    +-------+-----------------+-------+-------------------------------+
+
+                        Table 11: Scoreboard Fields
+
+             +========+======+=======+======================+
+             | Field  | Type | Bytes | Value                |
+             +========+======+=======+======================+
+             | State  | u8   | 1     | See Table 14         |
+             +--------+------+-------+----------------------+
+             | Score  | u32  | 4     | Points of the player |
+             +--------+------+-------+----------------------+
+             | Lives  | u8   | 1     | Lives left           |
+             +--------+------+-------+----------------------+
+             | Weapon | u8   | 1     | See Table 13         |
+             +--------+------+-------+----------------------+
+
+                      Table 12: PlayerStatus Fields
+
+              +========+=======+============================+
+              | Name   | Value | Meaning                    |
+              +========+=======+============================+
+              | Plasma | 0     | One missile straight ahead |
+              +--------+-------+----------------------------+
+              | Spread | 1     | Three pellets in a fan     |
+              +--------+-------+----------------------------+
+
+                             Table 13: Weapons
+
+
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 12]
+
+                             J-Type Protocol               November 2026
+
+
+   +=========+=======+================================================+
+   | Name    | Value | Meaning                                        |
+   +=========+=======+================================================+
+   | Free    | 0     | Nobody joined on this slot                     |
+   +---------+-------+------------------------------------------------+
+   | Playing | 1     | The player has a ship                          |
+   +---------+-------+------------------------------------------------+
+   | Out     | 2     | The player is out of lives until the next game |
+   +---------+-------+------------------------------------------------+
+   | Left    | 3     | The player quit or timed out                   |
+   +---------+-------+------------------------------------------------+
+
+                          Table 14: Slot States
+
+   A state outside 0 to 3, a weapon outside 0 to 1 and a game over byte
+   outside 0 to 2 MUST be rejected.  The game over byte is 1 or 2 from
+   the step the game ends until the server starts the next game.
+
+5.7.  Leave
+
+   The client sends a Leave when it quits.  The server frees the slot at
+   once, removes the ship, and tells the other clients with a
+   PlayerDisconnected event and the next scoreboard.  A client that
+   never joined MAY send a Leave; the server ignores it.
+
+                     +=======+======+=======+=======+
+                     | Field | Type | Bytes | Value |
+                     +=======+======+=======+=======+
+                     | Type  | u8   | 1     | 6     |
+                     +-------+------+-------+-------+
+
+                          Table 15: Leave Fields
+
+5.8.  Full
+
+   The server answers a Join with a Full instead of a Welcome when the
+   four slots are taken.  The client cannot play and stops.
+
+                     +=======+======+=======+=======+
+                     | Field | Type | Bytes | Value |
+                     +=======+======+=======+=======+
+                     | Type  | u8   | 1     | 7     |
+                     +-------+------+-------+-------+
+
+                          Table 16: Full Fields
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 13]
+
+                             J-Type Protocol               November 2026
+
+
+5.9.  Spawn
+
+   The server announces an entity that appeared since the previous
+   snapshot.  The event carries the whole entity, so a client that
+   missed the snapshot can still create it.  The snapshot of the same
+   step contains the entity too.
+
+        +========+=============+=======+==========================+
+        | Field  | Type        | Bytes | Value                    |
+        +========+=============+=======+==========================+
+        | Type   | u8          | 1     | 8                        |
+        +--------+-------------+-------+--------------------------+
+        | Tick   | u32         | 4     | Step of the server       |
+        +--------+-------------+-------+--------------------------+
+        | Entity | EntityState | 14    | The entity that appeared |
+        +--------+-------------+-------+--------------------------+
+
+                           Table 17: Spawn Fields
+
+5.10.  Destroy
+
+   The server announces that an entity is gone since the previous
+   snapshot.  The snapshot of the same step does not contain its id
+   anymore; a client that missed the event removes the entity when it
+   sees that snapshot.
+
+            +=======+======+=======+=========================+
+            | Field | Type | Bytes | Value                   |
+            +=======+======+=======+=========================+
+            | Type  | u8   | 1     | 9                       |
+            +-------+------+-------+-------------------------+
+            | Tick  | u32  | 4     | Step of the server      |
+            +-------+------+-------+-------------------------+
+            | Id    | u32  | 4     | The entity that is gone |
+            +-------+------+-------+-------------------------+
+
+                         Table 18: Destroy Fields
+
+5.11.  PlayerDisconnected
+
+   The server tells the remaining clients that the player of a slot
+   left, either with a Leave or by staying silent past the session
+   timeout.  The scoreboard of the same step shows the slot as Left.
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 14]
+
+                             J-Type Protocol               November 2026
+
+
+               +=======+======+=======+====================+
+               | Field | Type | Bytes | Value              |
+               +=======+======+=======+====================+
+               | Type  | u8   | 1     | 10                 |
+               +-------+------+-------+--------------------+
+               | Tick  | u32  | 4     | Step of the server |
+               +-------+------+-------+--------------------+
+               | Slot  | u8   | 1     | 0 to 3             |
+               +-------+------+-------+--------------------+
+
+                    Table 19: PlayerDisconnected Fields
+
+   A slot outside 0 to 3 MUST be rejected.
+
+5.12.  ScoreEvent
+
+   The server announces that a player earned points.  The points are
+   already counted in the scoreboard of the same step, which remains the
+   authority on the score.
+
+              +========+======+=======+====================+
+              | Field  | Type | Bytes | Value              |
+              +========+======+=======+====================+
+              | Type   | u8   | 1     | 11                 |
+              +--------+------+-------+--------------------+
+              | Tick   | u32  | 4     | Step of the server |
+              +--------+------+-------+--------------------+
+              | Slot   | u8   | 1     | 0 to 3             |
+              +--------+------+-------+--------------------+
+              | Points | u32  | 4     | Points earned      |
+              +--------+------+-------+--------------------+
+
+                       Table 20: ScoreEvent Fields
+
+   A slot outside 0 to 3 MUST be rejected.
+
+5.13.  DeathEvent
+
+   The server announces that a ship or a Bydo was destroyed, and who
+   destroyed it.  This is a notification for sounds and effects: the
+   snapshot and the scoreboard of the same step already show the
+   consequence.
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 15]
+
+                             J-Type Protocol               November 2026
+
+
+         +========+======+=======+===============================+
+         | Field  | Type | Bytes | Value                         |
+         +========+======+=======+===============================+
+         | Type   | u8   | 1     | 12                            |
+         +--------+------+-------+-------------------------------+
+         | Tick   | u32  | 4     | Step of the server            |
+         +--------+------+-------+-------------------------------+
+         | Id     | u32  | 4     | The entity that was destroyed |
+         +--------+------+-------+-------------------------------+
+         | Killer | u8   | 1     | Slot of the player, or 255    |
+         |        |      |       | for a crash or a Bydo missile |
+         +--------+------+-------+-------------------------------+
+
+                        Table 21: DeathEvent Fields
+
+   The killer MUST be 0 to 3 or 255; any other value MUST be rejected.
+
+5.14.  GameOverEvent
+
+   The server announces that the game ended, because every player is out
+   of lives or because the boss is beaten.  The scoreboard of the same
+   step has its game over byte at 1 or 2.  The server sends the event
+   once per game; it sends it again only when a new game ends.
+
+               +=======+======+=======+====================+
+               | Field | Type | Bytes | Value              |
+               +=======+======+=======+====================+
+               | Type  | u8   | 1     | 13                 |
+               +-------+------+-------+--------------------+
+               | Tick  | u32  | 4     | Step of the server |
+               +-------+------+-------+--------------------+
+
+                       Table 22: GameOverEvent Fields
+
+5.15.  PickUpEvent
+
+   The server announces that the ship of a player took a power-up.  This
+   is a notification for effects: the snapshot and the scoreboard of the
+   same step already show the consequence.
+
+
+
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 16]
+
+                             J-Type Protocol               November 2026
+
+
+    +==========+======+=======+=======================================+
+    | Field    | Type | Bytes | Value                                 |
+    +==========+======+=======+=======================================+
+    | Type     | u8   | 1     | 14                                    |
+    +----------+------+-------+---------------------------------------+
+    | Tick     | u32  | 4     | Step of the server                    |
+    +----------+------+-------+---------------------------------------+
+    | Slot     | u8   | 1     | Slot of the player whose ship took it |
+    +----------+------+-------+---------------------------------------+
+    | Power-up | u8   | 1     | See Table 24                          |
+    +----------+------+-------+---------------------------------------+
+
+                        Table 23: PickUpEvent Fields
+
+         +============+=======+==================================+
+         | Name       | Value | Meaning                          |
+         +============+=======+==================================+
+         | ExtraLife  | 0     | One more life, up to 5           |
+         +------------+-------+----------------------------------+
+         | Shield     | 1     | Takes the next hit; the ship has |
+         |            |       | 2 health points while it lasts   |
+         +------------+-------+----------------------------------+
+         | SpreadShot | 2     | The spread shot, until the ship  |
+         |            |       | is destroyed                     |
+         +------------+-------+----------------------------------+
+
+                            Table 24: Power-ups
+
+   A slot outside 0 to 3 and a power-up outside 0 to 2 MUST be rejected.
+
+6.  Snapshots and Chunking
+
+   The game runs on fixed steps of 1/60 s on both sides.  The server
+   starts its tick at 0, increases it by one at each step, and wraps it
+   modulo 2^32.  A snapshot, the events of the step and the scoreboard
+   all carry the tick of the step they describe.
+
+   After the 8-byte packet header and the 15-byte snapshot header, 14
+   bytes per entity fit in a datagram of at most 1200 bytes.  Therefore
+   a chunk carries at most 84 entities:
+
+   floor((1200 - 8 - 15) / 14) = 84
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 17]
+
+                             J-Type Protocol               November 2026
+
+
+   A snapshot of n entities is split into max(1, ceil(n / 84)) chunks,
+   numbered 0 to chunk count minus 1.  The chunk of index i carries the
+   entities from i * 84 to min((i + 1) * 84, n) - 1, in snapshot order.
+   The count field of the chunk is the number of entities it carries, so
+   the last chunk may be shorter.  A snapshot holds at most 64 chunks,
+   or 5376 entities; a larger snapshot is not sent.
+
+   An empty snapshot is legal: the server sends one chunk with chunk
+   count 1, index 0, entity count 0 and count 0.  A client MUST treat it
+   as an empty world, not as a missing snapshot.
+
+   A chunk is valid only when its chunk count is 1 to 64, its index is
+   below its chunk count, its entity count is at most 5376, its chunk
+   count is exactly the one the entity count implies, and its count is
+   exactly the number of entities the index implies.  A chunk that
+   breaks one of these rules MUST be dropped.  A client reassembles the
+   chunks of one tick, drops a duplicated index, and discards a snapshot
+   whose chunks disagree on the entity count or the chunk count.  An
+   incomplete snapshot is discarded when newer ones replace it; the next
+   complete snapshot carries the whole world anyway.
+
+7.  Reliability and Ordering
+
+   The protocol has no acknowledgement and no retransmission of game
+   messages.  It relies on two properties:
+
+   *  Every message that carries state carries the whole state of its
+      kind: a snapshot is the whole world and a scoreboard is the whole
+      score.  A lost one is replaced by the next one, 1/60 s later.
+
+   *  An event only announces a change that the snapshot or the
+      scoreboard of the same step already carries.  A lost event delays
+      a sound or an effect, and never changes the game.
+
+   Join is the only game message that needs an answer.  The client
+   repeats it every 500 ms until a Welcome or a Full arrives.  Connect
+   and Heartbeat are repeated by the session layer as described in
+   Section 4.
+
+   Snapshots can arrive out of order.  A client keeps the snapshots in
+   the order of their tick, and draws the world a few steps behind the
+   newest snapshot so it can interpolate between two known states.  The
+   number of steps of delay is a client choice; it does not change the
+   wire format.
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 18]
+
+                             J-Type Protocol               November 2026
+
+
+7.1.  Comparing Ticks
+
+   A tick is a 32-bit counter that wraps.  Two ticks are compared with
+   serial number arithmetic [RFC1982]: a is newer than b when the signed
+   32-bit value of a - b is positive.  For example, 0 is newer than
+   0xFFFFFFFF, and 0xFFFFFFFF is not newer than 0.  Two equal ticks are
+   not newer than each other.
+
+   The server uses this comparison for the tick of an Input.  It accepts
+   the first Input of a client, then only an Input whose tick is newer
+   than the last one accepted; a duplicated or reordered Input is
+   dropped.  A Join resets the comparison, so a client that starts its
+   ticks again is accepted.
+
+8.  Validation and Error Handling
+
+   A receiver validates each layer in order and drops what it cannot
+   accept.  It MUST NOT crash, block or allocate without bound on a
+   malformed or hostile datagram.
+
+       +====================+=====================================+
+       | Reason             | Cause                               |
+       +====================+=====================================+
+       | Not a game message | The packet is not a GameData packet |
+       +--------------------+-------------------------------------+
+       | Empty              | The payload holds no message type   |
+       +--------------------+-------------------------------------+
+       | Unknown type       | The type byte is not 1 to 13        |
+       +--------------------+-------------------------------------+
+       | Truncated          | A field ends after the payload      |
+       +--------------------+-------------------------------------+
+       | Invalid value      | A slot, a type, a state, an input   |
+       |                    | bit or a float is out of range      |
+       +--------------------+-------------------------------------+
+       | Trailing bytes     | The payload goes on after the last  |
+       |                    | field                               |
+       +--------------------+-------------------------------------+
+       | Invalid chunk      | The fields of a snapshot chunk do   |
+       |                    | not agree with its entity count     |
+       +--------------------+-------------------------------------+
+
+                     Table 25: Message Decode Errors
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 19]
+
+                             J-Type Protocol               November 2026
+
+
+   The server drops a datagram whose header fails, then a game message
+   that fails to decode, and counts it.  It prints the count and the
+   first reason at most once a second, so a flood cannot flood the log
+   too.  A game message from an endpoint without a session is dropped.
+   An Input from an endpoint without a slot is ignored, and an Input
+   whose tick is not newer than the last one accepted is ignored.
+
+   To bound the work of one receive call, the server handles at most 256
+   datagrams per call; the rest waits for the next call.  It queues at
+   most 256 events per step; an event past that is dropped, and the
+   state still carries the change.  Its incoming and outgoing datagram
+   queues hold at most 1024 datagrams, and its session table holds at
+   most 1024 peers.
+
+   A client applies the same strictness: it drops a datagram from
+   another address than its server, a packet the header rejects, and a
+   game message the decoder rejects.  It keeps the snapshots in the
+   order of their tick and never draws the world backwards, so a
+   duplicated or late snapshot has no effect on the picture.
+
+9.  Example Exchanges
+
+   The following diagrams show the messages, not every heartbeat or
+   ping.  UDP may reorder, duplicate or lose any of them.
+
+9.1.  Joining a Game
+
+   Client                                    Server
+     |                                         |
+     | Connect (0x80) ------------------------>|  session opens
+     | <------------------- ConnectAck (0x81)  |
+     |                                         |
+     | Join (type 1) ------------------------->|
+     | <------------ Welcome (type 2, slot 2)  |
+     |                                         |
+     | Input (type 3, tick 0) ---------------->|  each client step
+     | <----------- Snapshot (type 4, tick 0)  |  each server step
+     | <--------- Scoreboard (type 5, tick 0)  |
+
+                          Figure 1: Join Exchange
+
+   The client repeats Connect until the ConnectAck, then repeats Join
+   every 500 ms until the Welcome.  If the four slots are taken, the
+   answer is a Full (type 7) instead of a Welcome, and the client stops.
+
+9.2.  Playing a Step
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 20]
+
+                             J-Type Protocol               November 2026
+
+
+   Server step tick = t:
+     Snapshot, chunk 0 of 2, tick t   (up to 84 entities)
+     Snapshot, chunk 1 of 2, tick t   (the remaining entities)
+     Spawn, tick t, entity            (an entity appeared)
+     Destroy, tick t, id              (an entity is gone)
+     ScoreEvent, tick t, slot, points (a player earned points)
+     DeathEvent, tick t, id, killer   (a ship or a Bydo was destroyed)
+     PickUpEvent, tick t, slot, kind  (a ship took a power-up)
+     GameOverEvent, tick t            (the game ended)
+     Scoreboard, tick t               (the whole score, four slots)
+
+                 Figure 2: The Datagrams of One Server Step
+
+   Only the snapshot and the scoreboard are states.  The events of a
+   step are sent after the snapshot and before the scoreboard, all with
+   the same tick.  A client that misses them still sees their result in
+   the state of the same step.
+
+9.3.  Leaving and Timing Out
+
+   Client                     Server                 Other clients
+     | Leave (type 6) -------->|                        |
+     |                        | frees the slot, destroys the ship
+     |                        | PlayerDisconnected --->|
+     |                        | Scoreboard, Left ------>|
+     |                        |                        |
+     | (no Leave, 3 s silent) | sweep: same events     |
+
+                          Figure 3: Leave Exchange
+
+   A client that closes without sending Leave is removed by the session
+   timeout after 3000 ms.  The remaining clients see the same
+   PlayerDisconnected event and the same Left scoreboard.  When no
+   client is left, the server starts a new game for the next players.
+
+10.  Security Considerations
+
+   The protocol has no authentication and no encryption.  A player is
+   identified by the source address of its datagrams, and a UDP source
+   address can be written by anyone.  Someone who knows the address of a
+   player can send Inputs or a Leave in their name, and an Internet-
+   reachable server can be filled with fake sessions or fake players
+   until the four slots are taken.  The protocol is meant for a game on
+   a local network.
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 21]
+
+                             J-Type Protocol               November 2026
+
+
+   The server is authoritative: a client sends only the five input bits,
+   its own tick and its own Join or Leave.  It cannot set a position, a
+   health, a score, a killer or a slot on the wire.  The server computes
+   the game from the inputs it accepts.
+
+   A receiver bounds what an incoming datagram can make it allocate: the
+   packet size is limited to 1200 bytes, the snapshot entity count to
+   5376, the session table to 1024 peers, the datagram queues to 1024
+   entries, and the events of a step to 256.  A malformed datagram is
+   dropped and counted, and its processing never throws.
+
+   The server logs the address of a joining player and a rate-limited
+   summary of rejected datagrams.  It logs no payload and keeps no log
+   file; an operator who needs more keeps the standard output or adds
+   counters.
+
+11.  IANA Considerations
+
+   This document has no IANA actions.
+
+12.  References
+
+   [RFC768]   Postel, J., "User Datagram Protocol", STD 6, RFC 768,
+              August 1980, <https://www.rfc-editor.org/info/rfc768>.
+
+   [RFC1982]  Elz, R. and R. Bush, "Serial Number Arithmetic", RFC 1982,
+              August 1996, <https://www.rfc-editor.org/info/rfc1982>.
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997,
+              <https://www.rfc-editor.org/info/rfc2119>.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, May 2017,
+              <https://www.rfc-editor.org/info/rfc8174>.
+
+   [IEEE754]  IEEE, "IEEE Standard for Floating-Point Arithmetic",
+              IEEE 754-2019, July 2019,
+              <https://doi.org/10.1109/IEEESTD.2019.8766229>.
+
+Acknowledgments
+
+   The protocol was designed with the rest of the J-Type team, and its
+   implementation is checked against the codec tests and the fuzzing
+   harness of the project.
+
+Authors' Addresses
+
+
+
+
+Tutti, et al.                 Informational                    [Page 22]
+
+                             J-Type Protocol               November 2026
+
+
+   Matteo Tutti
+   EPITECH
+   Email: matteo.tutti@epitech.eu
+
+
+   Matthias Yildirim
+   EPITECH
+   Email: matthias.yildirim@epitech.eu
+
+
+   Valentino Zarrillo
+   EPITECH
+   Email: valentino.zarrillo@epitech.eu
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Tutti, et al.                 Informational                    [Page 23]

@@ -1,0 +1,90 @@
+site_name: J-Type
+site_description: Documentation of J-Type, a networked shoot'em up built on the Younity engine.
+repo_url: https://github.com/Rimapus/r-type
+repo_name: Rimapus/r-type
+edit_uri: ""
+# Kept beside the pages, left out of the published website
+exclude_docs: |
+  requirements.txt
+
+theme:
+  name: material
+  language: en
+  logo: assets/j_type_icon_16bit_x6.png
+  favicon: assets/j_type_icon_16bit_x6.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/index.md
+  - Architecture:
+      - architecture/index.md
+  - Guides:
+      - Write a wave: guides/write-a-wave.md
+  - Technical study:
+      - study/index.md
+      - Algorithms and data structures: study/algorithms.md
+      - Networking: study/networking.md
+      - Storage: study/storage.md
+      - Security: study/security.md
+  - Protocol RFC:
+      - rfc/index.md
+  - Accessibility:
+      - accessibility/index.md
+  - Contributing:
+      - contributing/index.md

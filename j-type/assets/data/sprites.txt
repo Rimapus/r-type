@@ -1,0 +1,161 @@
+# The sprites of the game, one animation per line, read by the client.
+# <name> <path> <width> <height> <columns> <first> <count> <duration> <loop|once> <origin x> <origin y> <layer>
+# The frames of a sheet are <width> x <height> pixels, numbered from 0, left to right then top to bottom,
+# <columns> on a row. The animation shows <count> frames from <first>, each one <duration> seconds,
+# then starts again (loop) or stays on the last one (once). The origin is the point of the frame put on the
+# position of the entity. The higher layers are drawn over the lower ones: 0 projectiles, 1 Bydos and
+# scenery, 2 ships, 3 effects, 4 interface.
+# The background layers are not here: the starfield scrolls them whole.
+
+# Players: flight, hit flash, destruction
+player_p1 sprites/16bit/player/player_p1.png 40 36 6 0 6 0.1 loop 24 19 2
+player_p1_hit sprites/16bit/player/player_p1.png 40 36 6 36 4 0.06 loop 24 19 2
+player_p1_death sprites/16bit/player/player_p1.png 40 36 6 42 6 0.1 once 24 19 2
+player_p2 sprites/16bit/player/player_p2.png 40 36 6 0 6 0.1 loop 24 19 2
+player_p2_hit sprites/16bit/player/player_p2.png 40 36 6 36 4 0.06 loop 24 19 2
+player_p2_death sprites/16bit/player/player_p2.png 40 36 6 42 6 0.1 once 24 19 2
+player_p3 sprites/16bit/player/player_p3.png 40 36 6 0 6 0.1 loop 24 19 2
+player_p3_hit sprites/16bit/player/player_p3.png 40 36 6 36 4 0.06 loop 24 19 2
+player_p3_death sprites/16bit/player/player_p3.png 40 36 6 42 6 0.1 once 24 19 2
+player_p4 sprites/16bit/player/player_p4.png 40 36 6 0 6 0.1 loop 24 19 2
+player_p4_hit sprites/16bit/player/player_p4.png 40 36 6 36 4 0.06 loop 24 19 2
+player_p4_death sprites/16bit/player/player_p4.png 40 36 6 42 6 0.1 once 24 19 2
+core_orb sprites/16bit/companion/core_orb.png 24 18 6 0 6 0.1 loop 12 9 2
+
+# Bydos
+blobling sprites/16bit/enemies/blobling.png 24 24 6 0 6 0.1 loop 12 12 1
+blobling_hit sprites/16bit/enemies/blobling.png 24 24 6 6 2 0.06 loop 12 12 1
+jelly sprites/16bit/enemies/jelly.png 24 32 6 0 6 0.12 loop 12 16 1
+jelly_hit sprites/16bit/enemies/jelly.png 24 32 6 6 2 0.06 loop 12 16 1
+sentry_drone sprites/16bit/enemies/sentry_drone.png 24 24 4 0 4 0.1 loop 12 12 1
+sentry_drone_shoot sprites/16bit/enemies/sentry_drone.png 24 24 4 4 3 0.08 once 12 12 1
+sentry_drone_hit sprites/16bit/enemies/sentry_drone.png 24 24 4 8 2 0.06 loop 12 12 1
+carrier sprites/16bit/enemies/carrier.png 32 32 4 0 4 0.1 loop 16 16 1
+carrier_hit sprites/16bit/enemies/carrier.png 32 32 4 4 2 0.06 loop 16 16 1
+crawler sprites/16bit/enemies/crawler.png 16 16 4 0 4 0.1 loop 8 8 1
+crawler_curl sprites/16bit/enemies/crawler.png 16 16 4 4 4 0.08 once 8 8 1
+crawler_roll sprites/16bit/enemies/crawler.png 16 16 4 8 4 0.08 loop 8 8 1
+magnet_bot sprites/16bit/enemies/magnet_bot.png 24 24 4 0 4 0.1 loop 12 12 1
+magnet_bot_hit sprites/16bit/enemies/magnet_bot.png 24 24 4 4 2 0.06 loop 12 12 1
+missile sprites/16bit/enemies/missile.png 32 16 4 0 4 0.06 loop 16 8 1
+missile_warning sprites/16bit/enemies/missile_warning.png 16 16 4 0 4 0.1 loop 8 8 4
+spore sprites/16bit/enemies/spore.png 24 24 2 0 2 0.2 loop 12 12 1
+turret sprites/16bit/enemies/turret.png 24 24 5 0 1 0.1 loop 12 12 1
+turret_shoot sprites/16bit/enemies/turret.png 24 24 5 5 3 0.08 once 12 12 1
+turret_hit sprites/16bit/enemies/turret.png 24 24 5 35 1 0.06 loop 12 12 1
+
+# Bosses: the eye is drawn over the body
+incubator sprites/16bit/boss/incubator_composite.png 128 144 6 0 6 0.12 loop 64 72 1
+incubator_attack sprites/16bit/boss/incubator_composite.png 128 144 6 6 4 0.1 once 64 72 1
+incubator_hit sprites/16bit/boss/incubator_composite.png 128 144 6 12 2 0.06 loop 64 72 1
+incubator_damaged sprites/16bit/boss/incubator_composite.png 128 144 6 18 4 0.12 loop 64 72 1
+incubator_death sprites/16bit/boss/incubator_composite.png 128 144 6 24 6 0.15 once 64 72 1
+incubator_body sprites/16bit/boss/incubator_body.png 128 144 6 0 6 0.12 loop 64 72 1
+incubator_body_hit sprites/16bit/boss/incubator_body.png 128 144 6 12 2 0.06 loop 64 72 1
+incubator_body_death sprites/16bit/boss/incubator_body.png 128 144 6 24 6 0.15 once 64 72 1
+incubator_embryo sprites/16bit/boss/incubator_embryo.png 16 16 4 0 4 0.12 loop 8 8 1
+incubator_embryo_hit sprites/16bit/boss/incubator_embryo.png 16 16 4 4 1 0.06 loop 8 8 1
+incubator_eye sprites/16bit/boss/incubator_eye.png 24 24 9 0 9 0.12 loop 12 12 2
+incubator_eye_angry sprites/16bit/boss/incubator_eye.png 24 24 9 9 3 0.1 loop 12 12 2
+incubator_eye_hit sprites/16bit/boss/incubator_eye.png 24 24 9 18 2 0.06 loop 12 12 2
+incubator_eye_closed sprites/16bit/boss/incubator_eye.png 24 24 9 27 1 0.1 loop 12 12 2
+incubator_tail_head sprites/16bit/boss/incubator_tail_head.png 24 24 4 0 4 0.1 loop 12 12 1
+incubator_tail_head_hit sprites/16bit/boss/incubator_tail_head.png 24 24 4 4 1 0.06 loop 12 12 1
+incubator_tail_segment sprites/16bit/boss/incubator_tail_segment.png 16 16 4 0 4 0.1 loop 8 8 1
+incubator_tail_segment_hit sprites/16bit/boss/incubator_tail_segment.png 16 16 4 4 1 0.06 loop 8 8 1
+incubator_orb sprites/16bit/boss/incubator_orb.png 12 12 4 0 4 0.08 loop 6 6 0
+incubator_spit sprites/16bit/boss/incubator_spit.png 16 8 3 0 3 0.08 loop 8 4 0
+loader9 sprites/16bit/boss/loader9.png 64 64 6 0 4 0.12 loop 32 32 1
+loader9_attack sprites/16bit/boss/loader9.png 64 64 6 6 6 0.1 once 32 32 1
+loader9_hit sprites/16bit/boss/loader9.png 64 64 6 12 2 0.06 loop 32 32 1
+loader9_death sprites/16bit/boss/loader9.png 64 64 6 18 4 0.15 once 32 32 1
+
+# Projectiles
+plasma_shot_p1 sprites/16bit/projectiles/plasma_shot_p1.png 16 8 4 0 4 0.06 loop 8 4 0
+plasma_shot_p2 sprites/16bit/projectiles/plasma_shot_p2.png 16 8 4 0 4 0.06 loop 8 4 0
+plasma_shot_p3 sprites/16bit/projectiles/plasma_shot_p3.png 16 8 4 0 4 0.06 loop 8 4 0
+plasma_shot_p4 sprites/16bit/projectiles/plasma_shot_p4.png 16 8 4 0 4 0.06 loop 8 4 0
+spread_pellet_p1 sprites/16bit/projectiles/spread_pellet_p1.png 8 8 4 0 4 0.06 loop 4 4 0
+spread_pellet_p2 sprites/16bit/projectiles/spread_pellet_p2.png 8 8 4 0 4 0.06 loop 4 4 0
+spread_pellet_p3 sprites/16bit/projectiles/spread_pellet_p3.png 8 8 4 0 4 0.06 loop 4 4 0
+spread_pellet_p4 sprites/16bit/projectiles/spread_pellet_p4.png 8 8 4 0 4 0.06 loop 4 4 0
+charge_beam_lv1_p1 sprites/16bit/projectiles/charge_beam_lv1_p1.png 24 12 4 0 4 0.06 loop 12 6 0
+charge_beam_lv1_p2 sprites/16bit/projectiles/charge_beam_lv1_p2.png 24 12 4 0 4 0.06 loop 12 6 0
+charge_beam_lv1_p3 sprites/16bit/projectiles/charge_beam_lv1_p3.png 24 12 4 0 4 0.06 loop 12 6 0
+charge_beam_lv1_p4 sprites/16bit/projectiles/charge_beam_lv1_p4.png 24 12 4 0 4 0.06 loop 12 6 0
+charge_beam_lv2_p1 sprites/16bit/projectiles/charge_beam_lv2_p1.png 40 16 4 0 4 0.06 loop 20 8 0
+charge_beam_lv2_p2 sprites/16bit/projectiles/charge_beam_lv2_p2.png 40 16 4 0 4 0.06 loop 20 8 0
+charge_beam_lv2_p3 sprites/16bit/projectiles/charge_beam_lv2_p3.png 40 16 4 0 4 0.06 loop 20 8 0
+charge_beam_lv2_p4 sprites/16bit/projectiles/charge_beam_lv2_p4.png 40 16 4 0 4 0.06 loop 20 8 0
+charge_beam_lv3_p1 sprites/16bit/projectiles/charge_beam_lv3_p1.png 64 24 4 0 4 0.06 loop 32 12 0
+charge_beam_lv3_p2 sprites/16bit/projectiles/charge_beam_lv3_p2.png 64 24 4 0 4 0.06 loop 32 12 0
+charge_beam_lv3_p3 sprites/16bit/projectiles/charge_beam_lv3_p3.png 64 24 4 0 4 0.06 loop 32 12 0
+charge_beam_lv3_p4 sprites/16bit/projectiles/charge_beam_lv3_p4.png 64 24 4 0 4 0.06 loop 32 12 0
+enemy_orb sprites/16bit/projectiles/enemy_orb.png 8 8 4 0 4 0.08 loop 4 4 0
+enemy_laser sprites/16bit/projectiles/enemy_laser.png 16 4 2 0 2 0.06 loop 8 2 0
+bio_spit sprites/16bit/projectiles/bio_spit.png 12 12 4 0 4 0.08 loop 6 6 0
+
+# Effects, played once unless they last
+explosion_small sprites/16bit/fx/explosion_small.png 24 24 7 0 7 0.05 once 12 12 3
+explosion_big sprites/16bit/fx/explosion_big.png 48 48 9 0 9 0.06 once 24 24 3
+goo_splat sprites/16bit/fx/goo_splat.png 32 64 6 0 6 0.06 once 16 32 3
+hit_spark sprites/16bit/fx/hit_spark.png 12 12 4 0 4 0.04 once 6 6 3
+ion_puff sprites/16bit/fx/ion_puff.png 12 12 4 0 4 0.06 once 6 6 3
+smoke_puff sprites/16bit/fx/smoke_puff.png 16 16 6 0 6 0.08 once 8 8 3
+spawn_beam sprites/16bit/fx/spawn_beam.png 16 40 9 0 9 0.06 once 8 20 3
+shield_bubble sprites/16bit/fx/shield_bubble.png 40 40 4 0 4 0.1 loop 20 20 3
+debris_rock sprites/16bit/fx/debris.png 8 8 4 0 4 0.08 loop 4 4 3
+debris_gear sprites/16bit/fx/debris.png 8 8 4 4 4 0.08 loop 4 4 3
+debris_rod sprites/16bit/fx/debris.png 8 8 4 8 4 0.08 loop 4 4 3
+debris_flesh sprites/16bit/fx/debris.png 8 8 4 12 4 0.08 loop 4 4 3
+charge_up_p1 sprites/16bit/fx/charge_up_p1.png 24 24 6 0 6 0.06 loop 12 12 3
+charge_up_p2 sprites/16bit/fx/charge_up_p2.png 24 24 6 0 6 0.06 loop 12 12 3
+charge_up_p3 sprites/16bit/fx/charge_up_p3.png 24 24 6 0 6 0.06 loop 12 12 3
+charge_up_p4 sprites/16bit/fx/charge_up_p4.png 24 24 6 0 6 0.06 loop 12 12 3
+muzzle_flash_p1 sprites/16bit/fx/muzzle_flash_p1.png 12 12 3 0 3 0.04 once 6 6 3
+muzzle_flash_p2 sprites/16bit/fx/muzzle_flash_p2.png 12 12 3 0 3 0.04 once 6 6 3
+muzzle_flash_p3 sprites/16bit/fx/muzzle_flash_p3.png 12 12 3 0 3 0.04 once 6 6 3
+muzzle_flash_p4 sprites/16bit/fx/muzzle_flash_p4.png 12 12 3 0 3 0.04 once 6 6 3
+
+# Pick-ups
+boost sprites/16bit/pickups/boost.png 16 16 6 0 6 0.1 loop 8 8 1
+extra_life sprites/16bit/pickups/extra_life.png 16 16 6 0 6 0.1 loop 8 8 1
+health sprites/16bit/pickups/health.png 16 16 6 0 6 0.1 loop 8 8 1
+pod sprites/16bit/pickups/pod.png 16 16 6 0 6 0.1 loop 8 8 1
+shield sprites/16bit/pickups/shield.png 16 16 6 0 6 0.1 loop 8 8 1
+weapon_laser sprites/16bit/pickups/weapon_laser.png 16 16 6 0 6 0.1 loop 8 8 1
+weapon_spread sprites/16bit/pickups/weapon_spread.png 16 16 6 0 6 0.1 loop 8 8 1
+
+# Obstacles and props
+chem_barrel sprites/16bit/obstacles/chem_barrel.png 16 24 4 0 4 0.12 loop 8 12 1
+chem_barrel_leak sprites/16bit/obstacles/chem_barrel.png 16 24 4 4 4 0.1 loop 8 12 1
+chem_barrel_hit sprites/16bit/obstacles/chem_barrel.png 16 24 4 8 2 0.06 loop 8 12 1
+goo_sphere sprites/16bit/obstacles/goo_sphere.png 24 24 6 0 6 0.12 loop 12 12 1
+goo_sphere_burst sprites/16bit/obstacles/goo_sphere.png 24 24 6 6 5 0.06 once 12 12 1
+zapper sprites/16bit/obstacles/zapper.png 16 16 4 0 4 0.08 loop 8 8 1
+zapper_beam_v sprites/16bit/obstacles/zapper.png 16 16 4 8 4 0.06 loop 8 8 1
+zapper_off sprites/16bit/obstacles/zapper.png 16 16 4 16 1 0.1 loop 8 8 1
+block sprites/16bit/tiles/destructible.png 16 16 5 0 1 0.1 loop 8 8 1
+block_cracked sprites/16bit/tiles/destructible.png 16 16 5 5 1 0.1 loop 8 8 1
+beacon sprites/16bit/props/beacon.png 16 16 4 0 4 0.15 loop 8 8 1
+monitor sprites/16bit/props/monitor.png 16 16 6 0 6 0.15 loop 8 8 1
+specimen_tube sprites/16bit/props/specimen_tube.png 24 40 4 0 4 0.15 loop 12 20 1
+vent_fan sprites/16bit/props/vent_fan.png 16 16 4 0 4 0.06 loop 8 8 1
+prop_clipboard sprites/16bit/props/debris.png 16 16 8 0 8 0.08 loop 8 8 1
+prop_camera sprites/16bit/props/debris.png 16 16 8 8 8 0.08 loop 8 8 1
+prop_wrench sprites/16bit/props/debris.png 16 16 8 16 8 0.08 loop 8 8 1
+prop_paper sprites/16bit/props/debris.png 16 16 8 24 8 0.08 loop 8 8 1
+
+# Interface
+life_icon_p1 sprites/16bit/ui/life_icon_p1.png 12 12 6 0 6 0.12 loop 6 6 4
+life_icon_p1_lost sprites/16bit/ui/life_icon_p1.png 12 12 6 6 4 0.08 once 6 6 4
+life_icon_p2 sprites/16bit/ui/life_icon_p2.png 12 12 6 0 6 0.12 loop 6 6 4
+life_icon_p2_lost sprites/16bit/ui/life_icon_p2.png 12 12 6 6 4 0.08 once 6 6 4
+life_icon_p3 sprites/16bit/ui/life_icon_p3.png 12 12 6 0 6 0.12 loop 6 6 4
+life_icon_p3_lost sprites/16bit/ui/life_icon_p3.png 12 12 6 6 4 0.08 once 6 6 4
+life_icon_p4 sprites/16bit/ui/life_icon_p4.png 12 12 6 0 6 0.12 loop 6 6 4
+life_icon_p4_lost sprites/16bit/ui/life_icon_p4.png 12 12 6 6 4 0.08 once 6 6 4
+player_tag_p1 sprites/16bit/ui/player_tag_p1.png 16 12 4 0 4 0.15 loop 8 6 4
+player_tag_p2 sprites/16bit/ui/player_tag_p2.png 16 12 4 0 4 0.15 loop 8 6 4
+player_tag_p3 sprites/16bit/ui/player_tag_p3.png 16 12 4 0 4 0.15 loop 8 6 4
+player_tag_p4 sprites/16bit/ui/player_tag_p4.png 16 12 4 0 4 0.15 loop 8 6 4

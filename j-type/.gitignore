@@ -1,0 +1,10 @@
+build/
+.cache/
+compile_commands.json
+.DS_Store
+/r-type_*
+/j-climb/
+assets/**/*.json
+assets/preview/
+site/
+public/

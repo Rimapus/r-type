@@ -1,0 +1,55 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "J-Type with the engine from ../younity-engine (Debug)",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "tests",
+            "inherits": "default",
+            "displayName": "J-Type with the Criterion unit tests (Debug)",
+            "cacheVariables": {
+                "JTYPE_BUILD_TESTS": "ON"
+            }
+        },
+        {
+            "name": "coverage",
+            "inherits": "tests",
+            "displayName": "J-Type with the Criterion unit tests and gcovr coverage (Debug)",
+            "cacheVariables": {
+                "JTYPE_COVERAGE": "ON"
+            }
+        },
+        {
+            "name": "release",
+            "inherits": "default",
+            "displayName": "J-Type optimized build to package the game (Release)",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "fuzz",
+            "inherits": "default",
+            "displayName": "J-Type with the LibFuzzer harnesses (needs Clang)",
+            "cacheVariables": {
+                "JTYPE_BUILD_FUZZERS": "ON",
+                "CMAKE_CXX_FLAGS": "-fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "default", "configurePreset": "default" },
+        { "name": "tests", "configurePreset": "tests", "targets": ["tests_run"] },
+        { "name": "coverage", "configurePreset": "coverage" },
+        { "name": "release", "configurePreset": "release", "configuration": "Release" },
+        { "name": "fuzz", "configurePreset": "fuzz", "targets": ["fuzz_messages"] }
+    ]
+}
